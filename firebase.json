@@ -1,0 +1,5 @@
+{
+  "functions": [{ "source": "functions", "codebase": "default", "runtime": "nodejs22" }],
+  "database": { "rules": "database.rules.json" },
+  "hosting": { "public": "web", "ignore": ["**/.*"] }
+}

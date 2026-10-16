@@ -1,0 +1,13 @@
+{
+  "name": "vvdouble-shopline-functions",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.1.0",
+    "google-auth-library": "^9.14.0"
+  }
+}
