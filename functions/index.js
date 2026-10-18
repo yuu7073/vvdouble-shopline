@@ -393,6 +393,17 @@ exports.shopline = onRequest(
           return res.json({ status: r.status, ok: r.status === 200 || r.status === 204, body: r.body });
         }
 
+        case "getFlashCampaign": {
+          const r = await slFetch(token, `/flash_price_campaigns/${req.body.id}`);
+          const b = r.body || {};
+          const sets = (b.price_sets || []).map((ps) => ({
+            product_id: ps.product_id || (ps.product && ps.product.id) || null,
+            price_sale: ps.price_sale ? ps.price_sale.dollars : null,
+            details: (ps.price_details || []).map((d) => ({ variation_key: d.variation_key, price_sale: d.price_sale ? d.price_sale.dollars : null })),
+          }));
+          return res.json({ status: r.status, id: b.id, title: b.title, product_ids: b.product_ids || [], price_sets: sets });
+        }
+
         case "lastUpload": {
           const ids = req.body.productIds || [];
           const out = {};

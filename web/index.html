@@ -859,7 +859,13 @@ $('#btnRunCamp').addEventListener('click', async function(){
   // 限時促銷價
   if(st.flash && flashItems.length){
     var existing = []; try{ existing = (await api('flashCampaigns', {})).items; }catch(e){}
-    var maxN = 0; existing.forEach(function(c){ var m = new RegExp('^' + title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '-(\\d+)$').exec(c.title||''); if(m) maxN = Math.max(maxN, +m[1]); });
+    var maxN = 0, sameTitle = []; existing.forEach(function(c){ var m = new RegExp('^' + title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '(-(\\d+))?$').exec(c.title||''); if(m){ sameTitle.push(c); if(m[2]) maxN = Math.max(maxN, +m[2]); } });
+    // 已在同名活動裡的商品跳過
+    var already = {};
+    for (var si=0; si<sameTitle.length; si++){ try{ var fc = await api('getFlashCampaign', {id: sameTitle[si].id}); (fc.product_ids||[]).forEach(function(id){ already[id] = sameTitle[si].title; }); fc.price_sets.forEach(function(ps){ if(ps.product_id) already[ps.product_id] = sameTitle[si].title; }); }catch(e){} }
+    var skippedFlash = flashItems.filter(function(x){ return already[x.p.id]; });
+    flashItems = flashItems.filter(function(x){ return !already[x.p.id]; });
+    if(skippedFlash.length){ logC('－ ' + skippedFlash.length + ' 個商品已在後台同名促銷活動中，跳過不重建'); skippedFlash.forEach(function(x){ x.row.result += '－ 已在' + already[x.p.id] + ' '; }); }
     var groups = chunk(flashItems, 100);
     for(var g=0; g<groups.length; g++){
       var n = maxN + g + 1, name = title + '-' + n;
@@ -872,7 +878,16 @@ $('#btnRunCamp').addEventListener('click', async function(){
         var c = await api('createFlashCampaign', {title:name, start_at: toUTC(start), end_at: toUTC(end), price_sets: sets, uploader: who});
         if(!c.ok) throw new Error(JSON.stringify(c.error).slice(0,200));
         logC('✔ 建立限時促銷價「' + name + '」：' + c.count + ' 品'); createdFlash.push(c.id);
-        groups[g].forEach(function(x){ x.row.result += '✔ 促銷' + n + ' '; });
+        // 回讀比對
+        try{
+          var back = await api('getFlashCampaign', {id: c.id}); var bad = 0;
+          var map = {}; back.price_sets.forEach(function(ps){ map[ps.product_id] = ps; });
+          groups[g].forEach(function(x){ var ps = map[x.p.id]; var got = ps ? (ps.price_sale != null ? ps.price_sale : (ps.details[0] ? ps.details[0].price_sale : null)) : null;
+            if(!ps){ x.row.result += '✖ 促銷' + n + ' 回讀找不到 '; bad++; }
+            else if(got != null && Math.abs(got - x.row.sale) > 0.5){ x.row.result += '✖ 促銷' + n + ' 價格 ' + got + '≠' + x.row.sale + ' '; bad++; }
+            else x.row.result += '✔ 促銷' + n + ' '; });
+          logC((bad ? '✖ ' : '✔ ') + '「' + name + '」回讀比對：' + (groups[g].length - bad) + ' 正確' + (bad ? '，' + bad + ' 筆有問題（表格標紅）' : ''));
+        }catch(e){ logC('？ 「' + name + '」回讀失敗：' + e.message); groups[g].forEach(function(x){ x.row.result += '✔ 促銷' + n + '（未回讀） '; }); }
       }catch(e){ logC('✖ 建立「' + name + '」失敗：' + e.message); groups[g].forEach(function(x){ x.row.result += '✖ 促銷價 '; }); }
     }
   }
