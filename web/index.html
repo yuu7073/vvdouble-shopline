@@ -73,6 +73,7 @@
   <div class="tab active" data-tab="img">新品放圖</div>
   <div class="tab" data-tab="desc">文案／尺寸表</div>
   <div class="tab" data-tab="camp">活動設定</div>
+  <div class="tab" data-tab="mk">建立資料夾</div>
 </div>
 <main>
 <section id="panel-img">
@@ -206,6 +207,26 @@
   <div class="card">
     <div class="prog"><i id="bar3"></i></div>
     <div id="log3">尚未開始</div>
+  </div>
+</section>
+<section id="panel-mk" class="hidden">
+  <div class="card">
+    <div class="opts" style="margin-top:0">
+      <label style="flex:1;min-width:260px">表單網址　<input id="sheetUrl3" type="text" style="width:calc(100% - 80px)" placeholder="貼上 Google 試算表網址（例如 2026上架排程）"></label>
+      <button class="btn ghost" id="btnTabs3">載入分頁</button>
+      <label>分頁　<select id="sheetTab3" style="min-width:200px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分頁）</option></select></label>
+      <button class="btn" id="btnLoadMk" disabled>1. 讀取商品清單</button>
+      <span class="muted" id="mkMsg"></span>
+    </div>
+    <p class="muted mini" style="margin:4px 0 0">讀「名稱」與「顏色」兩欄。多色款會建顏色子資料夾；單色款只建商品資料夾（圖片直接放在裡面）。資料夾已存在（含前面加 OK 的）會跳過，不會動到裡面的檔案。</p>
+    <div class="opts">
+      <span class="muted" id="mkSummary"></span>
+      <span class="sp"></span>
+      <button class="btn orange" id="btnMk" disabled>2. 選擇「分類」資料夾並建立</button>
+    </div>
+  </div>
+  <div class="card">
+    <table id="tblMk"><thead><tr><th style="width:30px">#</th><th>商品資料夾</th><th>顏色子資料夾</th><th style="width:160px">結果</th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 </main>
@@ -464,6 +485,7 @@ Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(t){
     $('#panel-img').classList.toggle('hidden', t.dataset.tab !== 'img');
     $('#panel-desc').classList.toggle('hidden', t.dataset.tab !== 'desc');
     $('#panel-camp').classList.toggle('hidden', t.dataset.tab !== 'camp');
+    $('#panel-mk').classList.toggle('hidden', t.dataset.tab !== 'mk');
   });
 });
 
@@ -887,6 +909,59 @@ async function loadJobs(){
   }catch(e){ box.textContent = '✖ ' + e.message; }
 }
 $('#btnJobs').addEventListener('click', loadJobs);
+
+// ===== 建立資料夾 =====
+function sheetId3(){ var m=/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec($('#sheetUrl3').value); return m?m[1]:''; }
+try{ $('#sheetUrl3').value = localStorage.getItem('vv_sheet') || ''; }catch(e){}
+$('#btnTabs3').addEventListener('click', async function(){
+  var id = sheetId3(); if(!id){ $('#mkMsg').textContent = '✖ 請貼上正確的 Google 試算表網址'; return; }
+  try{ localStorage.setItem('vv_sheet', $('#sheetUrl3').value); }catch(e){}
+  $('#mkMsg').textContent = '載入分頁中…';
+  try{
+    var j = await api('sheetTabs', {spreadsheetId:id});
+    var sel = $('#sheetTab3'); sel.innerHTML = '';
+    j.tabs.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+    $('#mkMsg').textContent = j.title + '：' + j.tabs.length + ' 個分頁'; $('#btnLoadMk').disabled = false;
+  }catch(e){ $('#mkMsg').textContent = '✖ ' + e.message + ((e.data && e.data.email) ? '（機器人帳號 ' + e.data.email + '）' : ''); }
+});
+var mkRows = [];
+function renderMk(){
+  var tb = $('#tblMk tbody'); tb.innerHTML = '';
+  mkRows.forEach(function(r,i){ var tr=document.createElement('tr'); if(r.result && r.result.indexOf('✖')===0) tr.classList.add('bad'); if(r.result && r.result.indexOf('✔')===0) tr.classList.add('done');
+    tr.innerHTML = '<td>'+(i+1)+'</td><td>'+r.name+'</td><td>'+(r.colors.length>1 ? r.colors.map(function(c){return '<span class="tag">'+c+'</span>';}).join(' ') : '<span class="muted">單色（'+(r.colors[0]||'—')+'），不建子資料夾</span>')+'</td><td class="st">'+(r.result||'')+'</td>'; tb.appendChild(tr); });
+  $('#mkSummary').textContent = mkRows.length ? ('共 ' + mkRows.length + ' 款') : '';
+  $('#btnMk').disabled = !mkRows.length;
+}
+$('#btnLoadMk').addEventListener('click', async function(){
+  if(!$('#sheetTab3').value){ $('#mkMsg').textContent = '請先選分頁'; return; }
+  $('#mkMsg').textContent = '讀取表單中…';
+  var rows; try{ rows = (await api('sheetRows', {spreadsheetId:sheetId3(), tab:$('#sheetTab3').value})).rows; }catch(e){ $('#mkMsg').textContent = '✖ ' + e.message; return; }
+  if(rows.length<2){ $('#mkMsg').textContent='表單沒有內容'; return; }
+  var header = rows[0], iName = colIndex(header, ['名稱','商品名稱','品名']), iColor = colIndex(header, ['顏色','色','顏色/規格']);
+  if(iName<0){ $('#mkMsg').textContent='找不到「名稱」欄位'; return; }
+  mkRows = [];
+  rows.slice(1).forEach(function(r){ var name=(r[iName]||'').trim().replace(/[\\/:*?"<>|]/g,'');
+    if(!name || mkRows.some(function(x){return x.name===name;})) return;
+    var colors = iColor>=0 ? String(r[iColor]||'').split(/[\n,，、]/).map(function(c){return c.trim();}).filter(Boolean) : [];
+    mkRows.push({name:name, colors:colors, result:''}); });
+  renderMk(); $('#mkMsg').textContent = '讀到 ' + mkRows.length + ' 款，按右邊按鈕選擇要建立的位置';
+});
+$('#btnMk').addEventListener('click', async function(){
+  if(!window.showDirectoryPicker){ alert('這個瀏覽器不支援直接建立資料夾，請用 Chrome 或 Edge'); return; }
+  var dir; try{ dir = await window.showDirectoryPicker({mode:'readwrite'}); }catch(e){ return; }
+  if(!confirm('將在「' + dir.name + '」底下建立 ' + mkRows.length + ' 款商品資料夾（已存在的跳過）。確定？')) return;
+  var existing = {}; for await (var [n, h] of dir.entries()) { if(h.kind==='directory') existing[n.replace(/^OK\s*/i,'').trim()] = n; }
+  var made = 0, skipped = 0;
+  for (var i=0;i<mkRows.length;i++){ var r = mkRows[i];
+    try{
+      if(existing[r.name]){ r.result = '－ 已存在（' + existing[r.name] + '）'; skipped++; }
+      else { var ph = await dir.getDirectoryHandle(r.name, {create:true}); made++;
+        if(r.colors.length>1){ for (var k=0;k<r.colors.length;k++){ await ph.getDirectoryHandle(r.colors[k], {create:true}); made++; } }
+        r.result = '✔ 已建立'; }
+    }catch(e){ r.result = '✖ ' + e.message; }
+  }
+  renderMk(); $('#mkMsg').textContent = '完成：新建 ' + made + ' 個資料夾，跳過 ' + skipped + ' 款已存在';
+});
 </script>
 </body>
 </html>
