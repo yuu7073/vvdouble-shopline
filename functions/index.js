@@ -423,3 +423,6 @@ exports.shopline = onRequest(
     }
   }
 );
+
+// 實穿草稿產生器（桌面程式）後端：YouTube 授權／AI 標題／嵌入商品頁
+exports.reels = require("./reels").reels;
