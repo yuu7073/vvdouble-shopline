@@ -429,7 +429,7 @@ exports.shopline = onRequest(
 
 
 const SELF_URL = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/reels";
-const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly";
+const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
 const EMBED_MARK = "vv-reel-embed";
 
 async function slFetchR(token, path, opt = {}) {
@@ -581,7 +581,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-23c" });
+        if (op === "version") return res.json({ reels: "2026-10-23d" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -717,6 +717,42 @@ exports.reels = onRequest(
             } catch (e) { out.push({ id: pid, ok: false, error: String(e.message || e) }); }
           }
           return res.json({ results: out, failed: out.filter((x) => !x.ok).length });
+        }
+
+        case "removeVideo": {
+          // 從商品頁描述拿掉嵌入的影片（只動嵌入區塊，其餘描述不變）
+          const { productIds, videoId, by } = req.body;
+          if (!productIds || !productIds.length) return res.status(400).json({ error: "參數不足" });
+          const out = [];
+          for (const pid of productIds) {
+            try {
+              const cur = await slFetchR(token, `/products/${pid}?fields[]=description_translations&fields[]=title_translations`);
+              const old = ((cur.body && cur.body.description_translations) || {})["zh-hant"] || "";
+              const ptitle = ((cur.body && cur.body.title_translations) || {})["zh-hant"] || "";
+              const hasIt = videoId ? old.includes(`data-video="${videoId}"`) : new RegExp(`class="${EMBED_MARK}"`).test(old);
+              if (!hasIt) { out.push({ id: pid, title: ptitle, ok: true, skipped: true }); continue; }
+              await db.ref(`/backups/${pid}/description`).push({ html: old, at: Date.now(), by: by || "reels-remove" });
+              const html = stripEmbed(old);
+              const r = await slFetchR(token, `/products/${pid}`, { method: "PUT", json: { description_translations: { "zh-hant": html } } });
+              const ok = r.status === 200 || r.status === 201;
+              out.push({ id: pid, title: ptitle, ok, error: ok ? null : JSON.stringify(r.body).slice(0, 200) });
+            } catch (e) { out.push({ id: pid, ok: false, error: String(e.message || e) }); }
+          }
+          return res.json({ results: out, failed: out.filter((x) => !x.ok).length });
+        }
+
+        case "ytDelete": {
+          // 刪除 YouTube 影片（需要 youtube.force-ssl 權限；舊授權沒有的話要重新授權一次）
+          const { videoId } = req.body;
+          if (!videoId) return res.status(400).json({ error: "缺少 videoId" });
+          const t = await ytAccessToken(db);
+          const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?id=${encodeURIComponent(videoId)}`, {
+            method: "DELETE", headers: { Authorization: `Bearer ${t.access_token}` },
+          });
+          if (r.status === 204) { await db.ref(`/reels/${videoId}`).remove(); return res.json({ ok: true }); }
+          const body = await r.text();
+          const needAuth = r.status === 403 && /insufficient|scope|forbidden/i.test(body);
+          return res.json({ ok: false, status: r.status, needAuth, error: needAuth ? "目前的 YouTube 授權不能刪影片，請到設定重新授權一次" : body.slice(0, 300) });
         }
 
         default:
