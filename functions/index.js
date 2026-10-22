@@ -624,8 +624,14 @@ exports.reels = onRequest(
             const title = (it.title_translations || {})["zh-hant"] || "";
             const desc = ((it.description_translations || {})["zh-hant"]) || "";
             const m = desc.match(new RegExp(`class="${EMBED_MARK}" data-video="([^"]+)"`));
+            // 從商品描述的尺寸表抓每位模特的著用尺碼：Model-VV 154cm/92kg   著 3L4L 舒適
+            const plain = desc.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
+            const models = [];
+            const re = /Model-\s*([^\s<]+)\s+(\d+)cm\/(\d+)kg\s+(?:著\s*([^\s<]+)\s+)?([^\s<]+)/g;
+            let mm;
+            while ((mm = re.exec(plain)) !== null) models.push({ name: mm[1] === "VV" ? "VVN" : mm[1], height: mm[2], weight: mm[3], size: mm[4] || "", fit: mm[5] || "" });
             return {
-              id: it.id, title, status: it.status,
+              id: it.id, title, status: it.status, models,
               sku: it.sku || ((it.variations || [])[0] || {}).sku || "",
               color: title.replace(/\s+/g, "").startsWith(base) ? title.replace(/\s+/g, "").slice(base.length).replace(/^[-－—–_ ]+/, "") : "",
               exact: title.replace(/\s+/g, "").startsWith(base),
