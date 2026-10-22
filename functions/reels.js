@@ -158,14 +158,16 @@ exports.reels = onRequest(
           const tk = await db.ref("/youtube/token").get();
           const client = await ytClient(db);
           const keyS = await db.ref("/config/anthropicKey").get();
-          return res.json({ ok: true, youtube: tk.exists() ? { channel: tk.val().channel, at: tk.val().at } : null, client_ready: !!client, ai_ready: keyS.exists() && !!keyS.val() });
+          const todoS = await db.ref("/config/todoUrl").get();
+          return res.json({ ok: true, youtube: tk.exists() ? { channel: tk.val().channel, at: tk.val().at } : null, client_ready: !!client, ai_ready: keyS.exists() && !!keyS.val(), todo_url: todoS.exists() ? todoS.val() : "" });
         }
 
         case "ytSetup": {
           // 存 OAuth 用戶端（只做一次）
-          const { clientId, clientSecret, anthropicKey } = req.body;
+          const { clientId, clientSecret, anthropicKey, todoUrl } = req.body;
           if (clientId && clientSecret) await db.ref("/youtube/client").set({ client_id: clientId.trim(), client_secret: clientSecret.trim(), at: Date.now() });
           if (typeof anthropicKey === "string") await db.ref("/config/anthropicKey").set(anthropicKey.trim());
+          if (typeof todoUrl === "string") await db.ref("/config/todoUrl").set(todoUrl.trim());
           return res.json({ ok: true, authUrl: `${SELF_URL}?op=auth&pw=${encodeURIComponent(pw)}` });
         }
 
