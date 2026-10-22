@@ -618,7 +618,7 @@ exports.reels = onRequest(
           const name = String(req.body.name || "").trim();
           if (!name) return res.status(400).json({ error: "缺少名稱" });
           const q = encodeURIComponent(name);
-          const r = await slFetchR(token, `/products/search?query=${q}&per_page=50&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.sku&fields[]=items.variations&fields[]=items.description_translations&fields[]=items.medias`);
+          const r = await slFetchR(token, `/products/search?query=${q}&per_page=50&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.sku&fields[]=items.variations&fields[]=items.description_translations&fields[]=items.medias&fields[]=items.variations`);
           const base = name.replace(/\s+/g, "");
           const items = (r.body.items || []).map((it) => {
             const title = (it.title_translations || {})["zh-hant"] || "";
@@ -630,8 +630,16 @@ exports.reels = onRequest(
             const re = /Model-\s*([^\s<]+)\s+(\d+)cm\/(\d+)kg\s+(?:著\s*([^\s<]+)\s+)?([^\s<]+)/g;
             let mm;
             while ((mm = re.exec(plain)) !== null) models.push({ name: mm[1] === "VV" ? "VVN" : mm[1], height: mm[2], weight: mm[3], size: mm[4] || "", fit: mm[5] || "" });
+            // 規格（尺寸）：從變體欄位抓，F／ML／3L4L 這類
+            const sizes = [];
+            (it.variations || []).forEach((v) => {
+              (v.fields || []).forEach((f) => {
+                const val = ((f.name_translations || {})["zh-hant"]) || f.name || "";
+                if (/^(F|FREE|S|M|L|XL|SM|ML|XL2L|3L4L|5L6L|2L|3L|4L|5L|6L|2XL|3XL|4XL)$/i.test(String(val).trim()) && !sizes.includes(val)) sizes.push(String(val).trim());
+              });
+            });
             return {
-              id: it.id, title, status: it.status, models,
+              id: it.id, title, status: it.status, models, sizes,
               sku: it.sku || ((it.variations || [])[0] || {}).sku || "",
               color: title.replace(/\s+/g, "").startsWith(base) ? title.replace(/\s+/g, "").slice(base.length).replace(/^[-－—–_ ]+/, "") : "",
               exact: title.replace(/\s+/g, "").startsWith(base),
