@@ -559,6 +559,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
+        if (op === "version") return res.json({ reels: "2026-10-23b" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -618,11 +619,23 @@ exports.reels = onRequest(
           const name = String(req.body.name || "").trim();
           if (!name) return res.status(400).json({ error: "缺少名稱" });
           const q = encodeURIComponent(name);
-          const r = await slFetchR(token, `/products/search?query=${q}&per_page=50&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.sku&fields[]=items.variations&fields[]=items.description_translations&fields[]=items.medias&fields[]=items.variations`);
+          const r = await slFetchR(token, `/products/search?query=${q}&per_page=30&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.sku&fields[]=items.variations&fields[]=items.description_translations&fields[]=items.medias`);
           const base = name.replace(/\s+/g, "");
-          const items = (r.body.items || []).map((it) => {
+          // 搜尋結果不一定帶描述：同名的前 8 筆逐一補撈描述與變體
+          const list = (r.body.items || []);
+          const descMap = {};
+          const needDesc = list.filter((it) => (((it.title_translations || {})["zh-hant"] || "").replace(/\s+/g, "").startsWith(base))).slice(0, 8);
+          await Promise.all(needDesc.map(async (it) => {
+            try {
+              const d = await slFetchR(token, `/products/${it.id}?fields[]=description_translations&fields[]=variations`);
+              descMap[it.id] = d.body || {};
+            } catch (e) { descMap[it.id] = {}; }
+          }));
+          const items = list.map((it) => {
             const title = (it.title_translations || {})["zh-hant"] || "";
-            const desc = ((it.description_translations || {})["zh-hant"]) || "";
+            const full = descMap[it.id] || {};
+            if (full.variations && full.variations.length) it.variations = full.variations;
+            const desc = (((full.description_translations || it.description_translations) || {})["zh-hant"]) || "";
             const m = desc.match(new RegExp(`class="${EMBED_MARK}" data-video="([^"]+)"`));
             // 從商品描述的尺寸表抓每位模特的著用尺碼：Model-VV 154cm/92kg   著 3L4L 舒適
             const plain = desc.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
