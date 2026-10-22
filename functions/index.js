@@ -627,11 +627,24 @@ exports.reels = onRequest(
             // 從商品描述的尺寸表抓每位模特的著用尺碼：Model-VV 154cm/92kg   著 3L4L 舒適
             const plain = desc.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
             const models = [];
-            const re = /Model-\s*([^\s<]+)\s+(\d+)cm\/(\d+)kg\s+(?:著\s*([^\s<]+)\s+)?([^\s<]+)/g;
-            let mm;
-            while ((mm = re.exec(plain)) !== null) models.push({ name: mm[1] === "VV" ? "VVN" : mm[1], height: mm[2], weight: mm[3], size: mm[4] || "", fit: mm[5] || "" });
+            const chartSizes = [];
+            // 格式一：官網批次中心產生的表格（MODEL｜穿著｜身高｜體重｜…｜感受）＋ SIZE CHART 表頭
+            const cellText = (tr) => (tr.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || []).map((td) => td.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim());
+            (desc.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || []).forEach((tr) => {
+              const c = cellText(tr);
+              if (c.length >= 4 && /^\d+(\.\d+)?$/.test(c[2]) && /^\d+(\.\d+)?$/.test(c[3]) && c[0] && !/MODEL/i.test(c[0])) {
+                models.push({ name: c[0] === "VV" ? "VVN" : c[0], height: c[2], weight: c[3], size: c[1] || "", fit: c[c.length - 1] || "" });
+              }
+              if (c.length >= 2 && /^SIZE/i.test(c[0])) c.slice(1).forEach((x) => { if (x && !chartSizes.includes(x)) chartSizes.push(x); });
+            });
+            // 格式二：純文字「Model-VV 154cm/92kg   著 3L4L 舒適」
+            if (!models.length) {
+              const re = /Model-\s*([^\s<]+)\s+(\d+)cm\/(\d+)kg\s+(?:著\s*([^\s<]+)\s+)?([^\s<]+)/g;
+              let mm;
+              while ((mm = re.exec(plain)) !== null) models.push({ name: mm[1] === "VV" ? "VVN" : mm[1], height: mm[2], weight: mm[3], size: mm[4] || "", fit: mm[5] || "" });
+            }
             // 規格（尺寸）：從變體欄位抓，F／ML／3L4L 這類
-            const sizes = [];
+            const sizes = chartSizes.slice();
             (it.variations || []).forEach((v) => {
               (v.fields || []).forEach((f) => {
                 const val = ((f.name_translations || {})["zh-hant"]) || f.name || "";
