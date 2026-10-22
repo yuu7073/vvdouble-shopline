@@ -480,15 +480,37 @@ const FALLBACK_TITLES = [
   (p) => `穿上就知道的舒服，看看實穿怎麼動｜VV Double`,
 ];
 
-async function aiTitle(db, p) {
+async function productDescription(token, name) {
+  // 用商品名稱到 Shopline 找同名商品，回傳描述純文字（給 AI 標題當依據，不能腦補）
+  const base = String(name || "").replace(/\s+/g, "");
+  if (!base) return "";
+  try {
+    const r = await slFetchR(token, `/products/search?query=${encodeURIComponent(name)}&per_page=10&fields[]=items.id&fields[]=items.title_translations`);
+    const items = r.body.items || [];
+    const hit = items.find((it) => (((it.title_translations || {})["zh-hant"] || "").replace(/\s+/g, "").startsWith(base))) || items[0];
+    if (!hit) return "";
+    const d = await slFetchR(token, `/products/${hit.id}?fields[]=description_translations&fields[]=summary_translations`);
+    const html = (((d.body || {}).description_translations || {})["zh-hant"]) || "";
+    const summary = (((d.body || {}).summary_translations || {})["zh-hant"]) || "";
+    const text = (summary + "\n" + html)
+      .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+    return text.slice(0, 2500);
+  } catch (e) { console.error("productDescription", e); return ""; }
+}
+
+async function aiTitle(db, p, token) {
   const keyS = await db.ref("/config/anthropicKey").get();
   const key = keyS.exists() ? keyS.val() : "";
+  const desc = (token && p.name) ? await productDescription(token, p.name) : "";
   const ctx = [
+    p.name ? `商品名稱：${p.name}` : "",
     p.category ? `類別：${p.category}` : "",
     (p.features || []).length ? `拍攝特點：${p.features.join("、")}` : "",
     (p.colors || []).length ? `顏色：${p.colors.join("、")}` : "",
     p.models ? `出鏡模特：${p.models}` : "",
     p.extra ? `補充：${p.extra}` : "",
+    desc ? `官網商品描述（唯一可用的事實來源）：\n${desc}` : "",
   ].filter(Boolean).join("\n");
   if (key) {
     try {
@@ -497,8 +519,8 @@ async function aiTitle(db, p) {
         headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-5",
-          max_tokens: 200,
-          system: "你是台灣大尺碼女裝品牌 VV DOUBLE 的社群小編。寫 YouTube Shorts 標題：一句繁體中文、18 字以內、口語自然、像朋友推薦；只描述穿起來的感覺、版型或場合，絕對不要出現商品名稱、品牌名、引號、井字標籤或 emoji。只輸出標題本身。",
+          max_tokens: 300,
+          system: "你是台灣大尺碼女裝品牌 VV DOUBLE 的社群小編，為一支模特實穿影片寫 YouTube Shorts 標題。規則：一句繁體中文、18 字以內、口語自然、像朋友推薦。內容只能根據提供的商品名稱與官網商品描述：單品種類（外套／洋裝／褲子…）、版型、材質、細節、適合場合都必須是描述裡有寫的，描述沒提到的一律不能寫、不能猜、不能套用其他單品的講法；寫錯單品種類是最嚴重的錯誤。標題裡不要出現完整商品名稱、品牌名、引號、井字標籤或 emoji。只輸出標題本身，一行一個。",
           messages: [{ role: "user", content: `請給 ${p.n || 3} 個不同角度的標題，一行一個，不要編號。\n${ctx}` }],
         }),
       });
@@ -559,7 +581,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-23b" });
+        if (op === "version") return res.json({ reels: "2026-10-23c" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -610,7 +632,7 @@ exports.reels = onRequest(
         }
 
         case "aiTitle": {
-          const titles = await aiTitle(db, req.body || {});
+          const titles = await aiTitle(db, req.body || {}, token);
           return res.json({ titles });
         }
 
