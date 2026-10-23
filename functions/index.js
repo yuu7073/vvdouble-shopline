@@ -586,7 +586,8 @@ async function aiTitle(db, p, token) {
       const j = await r.json();
       if (j.error) { AI_LAST_ERROR = `${j.error.type || ""} ${j.error.message || ""}`.trim(); console.error("aiTitle api", AI_LAST_ERROR); }
       else AI_LAST_ERROR = "";
-      const text = ((j.content || [])[0] || {}).text || "";
+      const text = (j.content || []).filter((b) => b && b.type === "text").map((b) => b.text || "").join("\n");
+      if (!text && !j.error) AI_LAST_ERROR = "AI 沒有回傳文字：" + JSON.stringify(j).slice(0, 400);
       const lines = text.split(/\r?\n/).map((x) => x.replace(/^[\d\.\-\s、]+/, "").replace(/[「」"'#!！]/g, "").trim())
         .filter(Boolean);
       const clean = lines.filter((x) => !/[配搭]/.test(x));      // 寫了「配／搭」什麼的那句不要（影片裡怎麼搭不知道）
@@ -645,7 +646,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-24c" });
+        if (op === "version") return res.json({ reels: "2026-10-24d" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
