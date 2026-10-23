@@ -530,7 +530,7 @@ function stripEmbed(html) {
 
 const FALLBACK_TITLES = [
   (p) => `${p.category || "這件"}這樣穿，不同身形都好看｜VV Double`,
-  (p) => `同一件，${p.models || "大尺碼和中尺碼"}各自的穿法｜VV Double`,
+  (p) => `同一件，大尺碼和中尺碼各自的穿法｜VV Double`,
   (p) => `穿上就知道的舒服，看看實穿怎麼動｜VV Double`,
 ];
 
@@ -562,7 +562,7 @@ async function aiTitle(db, p, token) {
     p.category ? `類別：${p.category}` : "",
     (p.features || []).length ? `拍攝特點：${p.features.join("、")}` : "",
     (p.colors || []).length ? `顏色：${p.colors.join("、")}` : "",
-    p.models ? `出鏡模特：${p.models}` : "",
+
     p.extra ? `補充：${p.extra}` : "",
     desc ? `官網商品描述（唯一可用的事實來源）：\n${desc}` : "",
   ].filter(Boolean).join("\n");
@@ -574,7 +574,7 @@ async function aiTitle(db, p, token) {
         body: JSON.stringify({
           model: "claude-sonnet-4-5",
           max_tokens: 300,
-          system: "你是台灣大尺碼女裝品牌 VV DOUBLE 的社群小編，為一支模特實穿影片寫 YouTube Shorts 標題。規則：一句繁體中文、18 字以內、口語自然、像朋友推薦。內容只能根據提供的商品名稱與官網商品描述：單品種類（外套／洋裝／褲子…）、版型、材質、細節、適合場合都必須是描述裡有寫的，描述沒提到的一律不能寫、不能猜、不能套用其他單品的講法；寫錯單品種類是最嚴重的錯誤。標題裡不要出現完整商品名稱、品牌名、引號、井字標籤或 emoji。只輸出標題本身，一行一個。",
+          system: "你是台灣大尺碼女裝品牌 VV DOUBLE 的社群小編，為一支模特實穿影片寫 YouTube Shorts 標題。規則：一句繁體中文、18 字以內、口語自然、像朋友推薦。內容只能根據提供的商品名稱與官網商品描述：單品種類（外套／洋裝／褲子…）、版型、材質、細節、適合場合都必須是描述裡有寫的，描述沒提到的一律不能寫、不能猜、不能套用其他單品的講法；寫錯單品種類是最嚴重的錯誤。標題裡不要出現完整商品名稱、品牌名、模特名字（不要寫誰穿、不要用人名開頭）、引號、井字標籤或 emoji；焦點放在這件商品本身的特色與穿起來的效果。只輸出標題本身，一行一個。",
           messages: [{ role: "user", content: `請給 ${p.n || 3} 個不同角度的標題，一行一個，不要編號。\n${ctx}` }],
         }),
       });
@@ -635,7 +635,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-23d" });
+        if (op === "version") return res.json({ reels: "2026-10-24a" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
