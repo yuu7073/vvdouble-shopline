@@ -647,7 +647,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-24g" });
+        if (op === "version") return res.json({ reels: "2026-10-24h" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -720,6 +720,8 @@ exports.reels = onRequest(
             if (stop || items.length < 250) break;
           }
           const tw = (iso) => { if (!iso) return null; const d = new Date(new Date(iso).getTime() + 8 * 3600000); return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() }; };
+          // 檔期用貨號分：26AU0614 ＝ 年 26＋季 AU＋上架次序 06＋排列 14 → 同一次上架的全部在 26AU06；ST 是門市獨賣不列。
+          // 沒有照規則的貨號才退回用開賣日分。
           const groups = {};
           for (const it of raw) {
             const title = ((it.title_translations || {})["zh-hant"] || "").trim();
@@ -727,10 +729,6 @@ exports.reels = onRequest(
             const mm = title.match(/^(.*?)[-－—–]\s*([^-－—–]{1,8})$/);
             const base = (mm ? mm[1] : title).trim();
             const color = mm ? mm[2].trim() : "";
-            const when = tw(it.available_start_time || it.schedule_publish_at || it.created_at);   // 開賣時間＝檔期日（排程上架常設在前一晚 22:00）
-            const code = when ? `${String(when.m).padStart(2, "0")}${String(when.d).padStart(2, "0")}` : "0000";
-            const tabKey = when ? `${when.y}-${code}` : "未排程";
-            const g = groups[tabKey] = groups[tabKey] || { tab: when ? `${when.m}/${when.d} 上架` : "未排程", code, year: when ? when.y : 0, month: when ? when.m : 0, day: when ? when.d : 0, items: {} };
             const sizes = [];
             let sku = it.sku || "";
             (it.variations || []).forEach((v) => {
@@ -740,7 +738,14 @@ exports.reels = onRequest(
                 if (/^(F|FREE|S|M|L|XL|SM|ML|XL2L|3L4L|5L6L|2L|3L|4L|5L|6L|2XL|3XL|4XL)$/i.test(val) && !sizes.includes(val)) sizes.push(val);
               });
             });
-            const skuBase = (sku.match(/^([A-Z0-9]{6,10})/i) || [])[1] || "";
+            const sm = String(sku).toUpperCase().match(/^(\d{2})(SP|SU|AU|WI|ST)(\d{2})(\d{2})/);
+            if (sm && sm[2] === "ST") continue;                       // 門市獨賣不列
+            const skuBase = sm ? sm[0] : ((sku.match(/^([A-Z0-9]{6,10})/i) || [])[1] || "");
+            const when = tw(it.available_start_time || it.schedule_publish_at || it.created_at);
+            const dayKey = when ? `${when.y}-${String(when.m).padStart(2, "0")}${String(when.d).padStart(2, "0")}` : "";
+            const tabKey = sm ? `${sm[1]}${sm[2]}${sm[3]}` : (dayKey || "未排程");
+            const g = groups[tabKey] = groups[tabKey] || { key: tabKey, bySku: !!sm, year: sm ? 2000 + Number(sm[1]) : (when ? when.y : 0), season: sm ? sm[2] : "", order: sm ? Number(sm[3]) : 0, days: {}, items: {} };
+            if (dayKey) g.days[dayKey] = (g.days[dayKey] || 0) + 1;
             const p = g.items[base] = g.items[base] || { name: base, sku: skuBase.toUpperCase(), colors: [], specs: [], features: [], category: "", models: [], product_ids: [], statuses: [], tags: [], created_at: it.created_at };
             if (color && !p.colors.includes(color)) p.colors.push(color);
             sizes.forEach((x) => { if (!p.specs.includes(x)) p.specs.push(x); });
@@ -750,9 +755,17 @@ exports.reels = onRequest(
             p.statuses.push(it.status);
             if (it.created_at < p.created_at) p.created_at = it.created_at;
           }
-          const tabs = Object.values(groups).map((g) => ({ ...g, items: Object.values(g.items).map((p) => ({ ...p, status: p.statuses.every((x) => x === "active") ? "已上架" : (p.statuses.some((x) => x === "active") ? "部分上架" : "未上架"), features: p.tags }))
-            .sort((a, b) => (a.created_at < b.created_at ? -1 : 1)) }))
-            .sort((a, b) => (b.year - a.year) || (b.month - a.month) || (b.day - a.day));
+          const tabs = Object.values(groups).map((g) => {
+            // 這檔的日期＝這群商品最多人設定的開賣日
+            const day = Object.entries(g.days).sort((a, b) => b[1] - a[1])[0];
+            const dk = day ? day[0] : "";
+            const y = dk ? Number(dk.slice(0, 4)) : g.year, m = dk ? Number(dk.slice(5, 7)) : 0, d = dk ? Number(dk.slice(7, 9)) : 0;
+            const code = g.key;      // 介面用來勾選的識別，必須唯一
+            const tab = (dk ? `${m}/${d} 上架` : "未排程") + (g.bySku ? `・${g.key}` : "");
+            const items = Object.values(g.items).map((p) => ({ ...p, status: p.statuses.every((x) => x === "active") ? "已上架" : (p.statuses.some((x) => x === "active") ? "部分上架" : "未上架"), features: p.tags }))
+              .sort((a, b) => (a.sku < b.sku ? -1 : 1));
+            return { tab, code, key: g.key, year: y, month: m, day: d, items };
+          }).sort((a, b) => (b.year - a.year) || (b.month - a.month) || (b.day - a.day) || (b.key < a.key ? -1 : 1));
           return res.json({ ok: true, updated: new Date().toISOString(), days, total: raw.length, tabs });
         }
 
