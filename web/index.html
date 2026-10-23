@@ -29,9 +29,23 @@
   tr.bad td{background:#fdecea}
   tr.warn td{background:#fff6e5}
   tr.done td{background:#eaf7ef}
-  .thumbs{display:flex;gap:4px;flex-wrap:wrap}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;padding:4px 6px 4px 0}
   .thumbs img{width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
   .thumbs img.first{outline:2px solid var(--orange)}
+  .thumbs img{cursor:grab;-webkit-user-drag:none;user-select:none;touch-action:none}
+  .dragghost{position:fixed;width:44px;height:44px;object-fit:cover;border-radius:4px;border:2px solid var(--blue);opacity:.85;pointer-events:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+  .th.dragging img{opacity:.3}
+  body.nodrag{cursor:grabbing;user-select:none}
+  .th{position:relative;display:inline-block}
+  .th.ins-l::before,.th.ins-r::after{content:'';position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--blue);border-radius:2px}
+  .th.ins-l::before{left:-6px}
+  .th.ins-r::after{right:-6px}
+  .th .x{position:absolute;top:-6px;right:-6px;width:16px;height:16px;line-height:14px;text-align:center;border-radius:50%;background:#fff;color:var(--red);border:1px solid var(--red);font-size:12px;cursor:pointer;display:none}
+  .th:hover .x{display:block}
+  .thumbs img.over{opacity:.35;outline:2px solid var(--red)}
+  .thumbs img.unm{outline:2px dashed #b35a0c}
+  .thumbs:empty{min-height:46px;min-width:46px;border:1px dashed var(--line);border-radius:4px}
+  .thumbs.over{background:#eef3fb;border-radius:4px}
   .tag{display:inline-block;padding:2px 7px;border-radius:10px;font-size:12px;background:#eef2f8;margin-right:4px}
   .tag.red{background:#fdecea;color:var(--red)}
   .tag.green{background:#eaf7ef;color:var(--green)}
@@ -43,14 +57,26 @@
   .prog i{display:block;height:100%;background:var(--orange);width:0;transition:width .2s}
   .hidden{display:none}
   .tabs{display:flex;gap:6px;max-width:1200px;margin:16px auto 0;padding:0 16px}
-  .tab{padding:10px 18px;border-radius:10px 10px 0 0;background:#e8edf5;color:var(--ink);cursor:pointer;font-weight:600;border:1px solid var(--line);border-bottom:0}
-  .tab.active{background:#fff}
+  .tab{padding:10px 18px;border-radius:10px 10px 0 0;cursor:pointer;font-weight:600;border:1px solid var(--line);border-bottom:0;opacity:.75}
+  .tab.t-orange{background:#f7c99a;color:#5a2d00}
+  .tab.t-yellow{background:#f5e38a;color:#4a3b00}
+  .tab.active{opacity:1;box-shadow:0 -2px 0 rgba(0,0,0,.08) inset}
+  .tab.t-orange.active{background:var(--orange);color:#fff}
+  .tab.t-yellow.active{background:#e9c400;color:#2b2200}
+  .tab.t-green{background:#bfe3cc;color:#14452a}
+  .tab.t-green.active{background:var(--green);color:#fff}
+  .catbox{display:flex;flex-wrap:wrap;gap:4px 12px;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px}
+  .catbox label{display:inline-flex;align-items:center;gap:4px}
+  #tblNp td{font-size:13px}
+  #tblNp input.pr{width:70px;padding:4px;border:1px solid var(--line);border-radius:6px}
   textarea{width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:10px;font-family:inherit;font-size:13px;resize:vertical}
   .preview{border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px;max-height:520px;overflow:auto}
   .desc-list{display:grid;gap:10px}
   .desc-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:8px}
   .desc-row.bad{background:#fdecea}.desc-row.done{background:#eaf7ef}
   .mini{font-size:12px}
+  .stp{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-right:6px;flex:none}
+  .test{color:var(--red)}
   .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 18px}
   .grid2 label{display:flex;flex-direction:column;gap:4px;font-size:13px}
   .grid2 input,.grid2 select{padding:8px;border:1px solid var(--line);border-radius:8px;font-size:14px;max-width:none}
@@ -61,7 +87,7 @@
 <body>
 <header>
   <h1>官網批次中心</h1>
-  <span class="muted">新品放圖 ｜ 文案／尺寸表 ｜ 活動設定</span>
+  <span class="muted">建立資料夾 ｜ 新品放圖 ｜ 文案／尺寸表 ｜ 活動設定 ｜ 商品建檔</span>
   <span class="sp"></span>
   <label class="field">密碼 <input type="password" id="pw" size="12"></label>
   <label class="field">操作者 <input type="text" id="who" size="8" placeholder="名字"></label>
@@ -70,25 +96,27 @@
 </header>
 
 <div class="tabs">
-  <div class="tab active" data-tab="img">新品放圖</div>
-  <div class="tab" data-tab="desc">文案／尺寸表</div>
-  <div class="tab" data-tab="camp">活動設定</div>
-  <div class="tab" data-tab="mk">建立資料夾</div>
+  <div class="tab t-orange" data-tab="mk">建立資料夾</div>
+  <div class="tab t-orange active" data-tab="img">新品放圖</div>
+  <div class="tab t-orange" data-tab="desc">文案／尺寸表</div>
+  <div class="tab t-yellow" data-tab="camp">活動設定</div>
+  <div class="tab t-green" data-tab="np">商品建檔</div>
 </div>
 <main>
 <section id="panel-img">
   <div class="card">
     <div class="drop" id="drop">
       把資料夾拖到這裡，或點擊選擇資料夾
-      <small>規則：首圖 P1F-1 ｜ 商品圖 2、3、4 ｜ 更多商品圖片（最多 20 張）：XX企劃-N → M-N（模特圖）→ B-N（擺拍）→ 長條圖-N ｜ 其他檔名與子資料夾一律跳過</small>
+      <small>首圖 P1F-1 ｜ 商品圖 2、3、4 ｜ 更多圖片：XX企劃-N → M-N → B-N → 長條圖-N（最多 20 張）｜ 縮圖可拖曳排順序</small>
       <input type="file" id="picker" webkitdirectory multiple class="hidden">
     </div>
     <div class="opts">
-      <label><input type="checkbox" id="optMain" checked> 放入商品圖（P1F-1、2、3、4）</label>
+      <label><input type="checkbox" id="optMain" checked> 放入商品圖</label>
       <label><input type="checkbox" id="optDetail" checked> 放入更多商品圖片</label>
-      <label><input type="checkbox" id="optCompress"> 縮圖後上傳（預設關閉：原檔上傳，Shopline 單張上限 10 MB）</label>
+      <label><input type="checkbox" id="optCompress"> 縮圖後上傳（單張上限 10 MB）</label>
       <span class="sp"></span>
       <button class="btn" id="btnMatch" disabled>1. 對照商品</button>
+      <button class="btn ghost" id="btnRename" disabled>改檔名（照目前順序）</button>
       <button class="btn orange" id="btnRun" disabled>2. 開始放圖</button>
     </div>
   </div>
@@ -122,16 +150,16 @@
       <button class="btn" id="btnParse" disabled>1. 讀取並對照商品</button>
       <button class="btn orange" id="btnWriteDesc" disabled>2. 寫入商品描述</button>
     </div>
-    <p class="muted mini" style="margin:6px 0 0">程式只讀「名稱、面料特性、產品特性(文案+材質)、尺寸表」四欄。第一次使用：請把表單「分享」給機器人帳號 <b id="botEmail">（按「載入分頁」後顯示）</b>（檢視者即可），之後所有分頁都能直接讀。</p>
-    <details style="margin-top:8px"><summary class="muted mini">或改用複製貼上</summary>
-      <textarea id="tsv" placeholder="到表單連同標題列整張複製，貼到這裡，再按「讀取並對照商品」"></textarea>
+    <p class="muted mini" style="margin:6px 0 0">讀取欄位：名稱、面料特性、產品特性(文案+材質)、尺寸表 ｜ 表單需先分享給 <b id="botEmail">850773404357-compute@developer.gserviceaccount.com</b>（檢視者）</p>
+    <details style="margin-top:8px"><summary class="muted mini">改用複製貼上</summary>
+      <textarea id="tsv" placeholder="連同標題列整張複製貼上"></textarea>
     </details>
   </div>
   <div class="card">
     <div class="desc-list" id="descList"><span class="muted">尚未讀取</span></div>
   </div>
   <div class="card">
-    <div class="muted" style="margin-bottom:6px">預覽（點左側「預覽」切換款式）</div>
+    <div class="muted" style="margin-bottom:6px">預覽</div>
     <div class="preview" id="descPreview"><span class="muted">—</span></div>
   </div>
   <div class="card">
@@ -142,54 +170,54 @@
 <section id="panel-camp" class="hidden">
   <div class="card">
     <div class="opts" style="margin-top:0">
-      <label style="flex:1;min-width:260px">表單網址　<input id="sheetUrl2" type="text" style="width:calc(100% - 80px)" placeholder="貼上 Google 試算表網址（例如 OUTLET 那張）"></label>
+      <span class="stp">1</span><label style="flex:1;min-width:260px">表單網址　<input id="sheetUrl2" type="text" style="width:calc(100% - 80px)" placeholder="貼上 Google 試算表網址"></label>
       <button class="btn ghost" id="btnTabs2">載入分頁</button>
       <label>分頁　<select id="sheetTab2" style="min-width:200px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分頁）</option></select></label>
-      <button class="btn" id="btnLoadCamp" disabled>1. 讀取並對照商品</button>
+      <button class="btn" id="btnLoadCamp" disabled>讀取並對照商品</button>
       <span class="muted" id="campMsg"></span>
     </div>
-    <p class="muted mini" style="margin:4px 0 0">表單需要「組頭」欄；有「原價」「改折扣價」才會建立限時促銷價。每個組頭會對到 Shopline 上所有顏色的商品。</p>
+    <p class="muted mini" style="margin:4px 0 0">讀取欄位：組頭、原價、改折扣價 ｜ 表單需先分享給 <b>850773404357-compute@developer.gserviceaccount.com</b>（檢視者）</p>
   </div>
 
   <div class="card">
+    <div style="margin-bottom:8px"><span class="stp">2</span><b class="mini">活動資訊</b></div>
     <div class="grid2">
-      <label>活動名稱（限時促銷價活動名稱，滿 100 品自動開 -1、-2…）<input id="campTitle" type="text" placeholder="例如 OUTLET SALES 2026線上特賣會 任選79折"></label>
-      <label>活動開始（＝商品上架時間）<input id="campStart" type="datetime-local"></label>
-      <label>活動結束（限時促銷價結束）<input id="campEnd" type="datetime-local"></label>
-      <label>活動分類（加入，原分類保留）<select id="campCat"><option value="">（按「載入分類」）</option></select></label>
-      <label>標籤（加上去，原標籤保留；多個用逗號）<input id="campTags" type="text" placeholder="例如 79折"></label>
+      <label>活動名稱（滿100品自動 -N）<input id="campTitle" type="text" placeholder="例如 OUTLET SALES 2026線上特賣會 任選79折"></label>
+      <label>活動開始（＝上架時間）<input id="campStart" type="datetime-local"></label>
+      <label>活動結束<input id="campEnd" type="datetime-local"></label>
+      <label>活動分類（加入，原分類保留）<select id="campCat"><option value="">（先載入分類）</option></select></label>
+      <label>標籤（加入，原標籤保留；多個用逗號）<input id="campTags" type="text" placeholder="例如 79折"></label>
       <label>&nbsp;<button class="btn ghost" id="btnCats" type="button">載入分類</button></label>
     </div>
     <div class="steps" style="margin-top:12px">
-      <b class="mini">要執行的步驟：</b>
-      <label><input type="checkbox" id="stUnpub" checked> 下架（狀態改為未上架）</label>
+      <span class="stp">3</span><b class="mini">執行項目：</b>
+      <label><input type="checkbox" id="stUnpub" checked> 下架</label>
       <label><input type="checkbox" id="stCat" checked> 加入活動分類</label>
-      <label><input type="checkbox" id="stPub" checked> 設定上架時間＝活動開始</label>
-      <label><input type="checkbox" id="stExcl" checked> 列出需手動開啟「不適用折扣商品」的清單（Shopline API 不開放寫入）</label>
+      <label><input type="checkbox" id="stPub" checked> 上架時間＝活動開始</label>
+      <label><input type="checkbox" id="stExcl" checked> 列出需手動開啟「不適用折扣」的商品</label>
       <label><input type="checkbox" id="stTag" checked> 加標籤</label>
-      <label><input type="checkbox" id="stSale" checked> 關閉「預設商品銷售時間」</label>
-      <label><input type="checkbox" id="stFlash" checked> 建立限時促銷價活動</label>
+      <label><input type="checkbox" id="stSale" checked> 關閉預設銷售時間</label>
+      <label><input type="checkbox" id="stFlash" checked> 建立限時促銷價</label>
     </div>
     <div class="steps" style="margin-top:6px;padding-top:8px;border-top:1px dashed var(--line)">
-      <b class="mini">活動結束後自動收尾（結束時間到的下一個整點自動執行，恢復成活動前的狀態）：</b>
+      <b class="mini">活動結束後自動收尾：</b>
       <label><input type="checkbox" id="cuCat" checked> 移除活動分類</label>
       <label><input type="checkbox" id="cuTag" checked> 移除活動標籤</label>
-      <label><input type="checkbox" id="cuExcl" checked> 列出需手動關閉「不適用折扣」的清單（原本關的才列）</label>
-      <label><input type="checkbox" id="cuSched"> 上架時間恢復原狀（測試用）</label>
-      <label><input type="checkbox" id="cuStatus"> 上架狀態恢復原狀（測試用）</label>
-      <label><input type="checkbox" id="cuFlash"> 刪除這次建立的促銷活動（測試用）</label>
+      <label><input type="checkbox" id="cuExcl" checked> 列出需手動關閉「不適用折扣」的商品</label>
+      <label class="test"><input type="checkbox" id="cuSched"> 上架時間恢復原狀（測試用）</label>
+      <label class="test"><input type="checkbox" id="cuStatus"> 上架狀態恢復原狀（測試用）</label>
+      <label class="test"><input type="checkbox" id="cuFlash"> 刪除這次建立的促銷活動（測試用）</label>
     </div>
     <div class="opts" style="margin-top:6px;padding-top:8px;border-top:1px dashed var(--line)">
-      <b class="mini">不適用折扣商品（API 不開放，改用後台腳本）：</b>
+      <span class="stp">4</span><b class="mini">不適用折扣（後台腳本）：</b>
       <button class="btn ghost" id="btnExclOn" disabled>產生「開啟」腳本</button>
       <button class="btn ghost" id="btnExclOff" disabled>產生「關閉」腳本</button>
-      <span class="muted mini">用法：登入 Shopline 後台任一頁 → 按 F12 → 點「Console」→ 貼上 → Enter（第一次貼會要求先輸入 allow pasting）</span>
+      <span class="muted mini">Shopline 後台 → F12 → Console → 貼上 → Enter</span>
     </div>
     <textarea id="exclScript" class="hidden" style="min-height:90px;font-family:Consolas,monospace;font-size:12px"></textarea>
     <div class="opts">
+      <span class="stp">5</span><button class="btn orange" id="btnRunCamp" disabled>執行活動設定</button>
       <span class="muted" id="campSummary"></span>
-      <span class="sp"></span>
-      <button class="btn orange" id="btnRunCamp" disabled>2. 執行活動設定</button>
     </div>
   </div>
 
@@ -201,7 +229,17 @@
   </div>
 
   <div class="card">
-    <div class="opts" style="margin-top:0"><b>收尾任務</b><button class="btn ghost" id="btnJobs">重新整理</button><span class="muted mini">「立即執行」可不等結束時間直接收尾（測試或提前結束用）</span></div>
+    <div class="opts" style="margin-top:0"><b>現有活動收尾</b>
+      <select id="exCat" style="min-width:220px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分類）</option></select>
+      <input id="exTags" type="text" placeholder="標籤，逗號分隔" style="padding:8px;border:1px solid var(--line);border-radius:8px;width:180px">
+      <input id="exEnd" type="datetime-local" style="padding:7px;border:1px solid var(--line);border-radius:8px">
+      <button class="btn ghost" id="btnExLoad">讀取商品</button>
+      <button class="btn orange" id="btnExSchedule" disabled>建立收尾任務</button>
+    </div>
+    <div id="exMsg" class="muted mini"></div>
+  </div>
+  <div class="card">
+    <div class="opts" style="margin-top:0"><b>收尾任務</b><button class="btn ghost" id="btnJobs">重新整理</button><span class="muted mini">「立即執行」＝不等結束時間直接收尾</span></div>
     <div id="jobsBox" class="muted">—</div>
   </div>
   <div class="card">
@@ -212,13 +250,13 @@
 <section id="panel-mk" class="hidden">
   <div class="card">
     <div class="opts" style="margin-top:0">
-      <label style="flex:1;min-width:260px">表單網址　<input id="sheetUrl3" type="text" style="width:calc(100% - 80px)" placeholder="貼上 Google 試算表網址（例如 2026上架排程）"></label>
+      <label style="flex:1;min-width:260px">表單網址　<input id="sheetUrl3" type="text" style="width:calc(100% - 80px)" placeholder="貼上 Google 試算表網址"></label>
       <button class="btn ghost" id="btnTabs3">載入分頁</button>
       <label>分頁　<select id="sheetTab3" style="min-width:200px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分頁）</option></select></label>
       <button class="btn" id="btnLoadMk" disabled>1. 讀取商品清單</button>
       <span class="muted" id="mkMsg"></span>
     </div>
-    <p class="muted mini" style="margin:4px 0 0">讀「名稱」與「顏色」兩欄。多色款會建顏色子資料夾；單色款只建商品資料夾（圖片直接放在裡面）。資料夾已存在（含前面加 OK 的）會跳過，不會動到裡面的檔案。</p>
+    <p class="muted mini" style="margin:4px 0 0">讀取欄位：名稱、顏色 ｜ 多色款建顏色子資料夾，單色款不建 ｜ 已存在的跳過</p>
     <div class="opts">
       <span class="muted" id="mkSummary"></span>
       <span class="sp"></span>
@@ -227,6 +265,41 @@
   </div>
   <div class="card">
     <table id="tblMk"><thead><tr><th style="width:30px">#</th><th>商品資料夾</th><th>顏色子資料夾</th><th style="width:160px">結果</th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+<section id="panel-np" class="hidden">
+  <div class="card">
+    <div class="opts" style="margin-top:0">
+      <label style="flex:1;min-width:260px">新品貨況表網址　<input id="sheetUrl4" type="text" style="width:calc(100% - 120px)" placeholder="【全通路新品頭單】試算表網址"></label>
+      <button class="btn ghost" id="btnTabs4">載入分頁</button>
+      <label>分頁　<select id="sheetTab4" style="min-width:200px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分頁）</option></select></label>
+    </div>
+    <p class="muted mini" style="margin:4px 0 8px">機器人 850773404357-compute@developer.gserviceaccount.com</p>
+    <div class="opts" style="margin-top:0">
+      <label style="flex:1;min-width:260px">排程表網址（零售價、英文名稱、大類中類）　<input id="sheetUrl5" type="text" style="width:calc(100% - 230px)" placeholder="2026上架排程(採購/品管)"></label>
+      <button class="btn ghost" id="btnTabs5">載入分頁</button>
+      <label>分頁　<select id="sheetTab5" style="min-width:200px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（可不選，價格手動填）</option></select></label>
+    </div>
+    <div class="grid2" style="margin-top:10px">
+      <label>上架時間（排程上架）<span style="display:flex;gap:6px;align-items:center"><select id="npPubDay" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="-1">上架日前一天</option><option value="0">上架日當天</option></select><input id="npPubTime" type="time" value="22:00"></span></label>
+      <label>銷售時間（預設商品銷售時間）<span style="display:flex;gap:6px;align-items:center"><select id="npSaleDay" style="padding:8px;border:1px solid var(--line);border-radius:8px"><option value="0">上架日當天</option><option value="-1">上架日前一天</option></select><input id="npSaleTime" type="time" value="12:30"></span></label>
+    </div>
+    <div class="opts">
+      <button class="btn ghost" id="btnCats4">載入分類</button>
+      <span class="muted" id="npCatMsg">這批共用分類</span>
+    </div>
+    <div id="npCats" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:36px"><span class="muted">尚未載入</span></div>
+    <div class="opts">
+      <span class="muted" id="npMsg"></span>
+      <span class="sp"></span>
+      <button class="btn" id="btnLoadNp" disabled>1. 讀取並預覽</button>
+      <button class="btn orange" id="btnRunNp" disabled>2. 建立商品</button>
+      <button class="btn ghost hidden" id="btnExclNp">不適用折扣腳本</button>
+    </div>
+  </div>
+  <div class="card">
+    <table id="tblNp"><thead><tr><th style="width:30px">#</th><th>商品名稱</th><th>規格 / SKU / 條碼</th><th style="width:90px">原價</th><th style="width:150px">不適用折扣／標籤</th><th>上架</th><th style="width:240px">分類</th><th style="width:170px">結果</th></tr></thead><tbody></tbody></table>
+    <div id="logNp" style="font-family:Consolas,monospace;font-size:12px;background:#1f2937;color:#d1d5db;padding:12px;border-radius:8px;max-height:200px;overflow:auto;white-space:pre-wrap;margin-top:12px">尚未開始</div>
   </div>
 </section>
 </main>
@@ -277,6 +350,7 @@ function classify(fileName){
   if ((m = /^模特圖?\d*\s*\((\d+)\)$/.exec(base))) return { grp:'detail', sub:2, order:+m[1] }; // 舊命名 模特圖 (N)
   if ((m = /^B-(\d+)$/i.exec(base))) return { grp:'detail', sub:3, order:+m[1] };            // 擺拍 B-N
   if ((m = /^擺拍\d*\s*\((\d+)\)$/.exec(base))) return { grp:'detail', sub:3, order:+m[1] }; // 舊命名 擺拍 (N)
+  if ((m = /^D-(\d+)$/i.exec(base))) return { grp:'detail', sub:0, order:+m[1] };            // 工具排序後 D-N
   if ((m = /^長條圖-(\d+)$/.exec(base))) return { grp:'detail', sub:4, order:+m[1] };        // 長條圖-N
   if ((m = /^vvdouble_長圖_(\d+)$/.exec(base))) return { grp:'detail', sub:4, order:+m[1] }; // 舊命名
   return null;
@@ -284,7 +358,7 @@ function classify(fileName){
 var SKIP_DIRS = { '長條圖':1, 'gif':1, 'GIF':1 };
 
 // 把 webkitRelativePath 或 entry path 轉成 {product, color, file}
-function addFile(file, relPath){
+function addFile(file, relPath, h, dir){
   var parts = relPath.split('/').filter(Boolean);
   if (parts.length < 2) return;
   if (!IMG_RE.test(file.name)) return;
@@ -302,8 +376,8 @@ function addFile(file, relPath){
   var p = products.find(function(x){ return x.key === key; });
   if (!p) { p = { key:key, name:name, color:color, files:{main:[],detail:[]}, skipped:[], match:null, candidates:[], status:'' }; products.push(p); }
   var c = classify(file.name);
-  if (!c) { p.skipped.push(file.name); return; }
-  p.files[c.grp].push({ file:file, order:c.order, sub:c.sub||0, name:file.name });
+  if (!c) { p.skipped.push({ file:file, order:0, sub:0, name:file.name, h:h, dir:dir }); return; }
+  p.files[c.grp].push({ file:file, order:c.order, sub:c.sub||0, name:file.name, h:h, dir:dir });
 }
 
 function finalizeProducts(){
@@ -314,8 +388,12 @@ function finalizeProducts(){
   products.forEach(function(p){
     p.files.main.sort(function(a,b){ return a.order-b.order; });
     p.files.detail.sort(function(a,b){ return a.sub-b.sub || a.order-b.order; });
+    // 沒照編號邏輯的檔案全部排在更多商品圖片最後面，之後用拖曳決定
+    p.skipped.sort(function(a,b){ return a.name.localeCompare(b.name,'zh-Hant',{numeric:true}); });
+    p.skipped.forEach(function(f){ f.unmatched = true; p.files.detail.push(f); });
+    p.skipped = [];
+    pinP1(p);
     p.over20 = p.files.detail.length > 20;
-    if (p.over20) p.files.detail = p.files.detail.slice(0,20);
   });
   products.sort(function(a,b){ return a.key.localeCompare(b.key,'zh-Hant'); });
 }
@@ -333,30 +411,137 @@ async function readEntry(entry, path, out){
   }
 }
 
+async function readHandle(h, path, out){
+  if (h.kind === 'file') { var f = await h.getFile(); out.push({ file:f, path:path + '/' + h.name, h:h }); }
+  else if (h.kind === 'directory') { for await (var ch of h.values()) { if (ch.kind === 'file') { var f2 = await ch.getFile(); out.push({ file:f2, path:path + '/' + h.name + '/' + ch.name, h:ch, dir:h }); } else await readHandle(ch, path + '/' + h.name, out); } }
+}
+var rootHandles = [];
 async function handleItems(items){
-  products = [];
+  products = []; rootHandles = [];
   var out = [];
-  for (var i=0;i<items.length;i++){
-    var e = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
-    if (e) await readEntry(e, '', out);
-  }
-  out.forEach(function(o){ addFile(o.file, o.path); });
-  finalizeProducts(); render();
+  var hs = [];
+  for (var i=0;i<items.length;i++){ if (items[i].kind === 'file' && items[i].getAsFileSystemHandle) hs.push(items[i].getAsFileSystemHandle()); }
+  var handles = (await Promise.all(hs)).filter(Boolean);
+  if (handles.length) { for (var k=0;k<handles.length;k++){ rootHandles.push(handles[k]); await readHandle(handles[k], '', out); } }
+  else { for (var i2=0;i2<items.length;i2++){ var e = items[i2].webkitGetAsEntry && items[i2].webkitGetAsEntry(); if (e) await readEntry(e, '', out); } }
+  out.forEach(function(o){ addFile(o.file, o.path, o.h, o.dir); });
+  finalizeProducts(); render(); buildThumbs();
 }
 
 var drop = $('#drop');
 drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('over'); });
 drop.addEventListener('dragleave', function(){ drop.classList.remove('over'); });
-drop.addEventListener('drop', function(e){ e.preventDefault(); drop.classList.remove('over'); handleItems(e.dataTransfer.items); });
-drop.addEventListener('click', function(){ $('#picker').click(); });
+drop.addEventListener('drop', function(e){ e.preventDefault(); drop.classList.remove('over'); var items = Array.prototype.slice.call(e.dataTransfer.items); handleItems(items); });
+drop.addEventListener('click', async function(){
+  if (!window.showDirectoryPicker) { $('#picker').click(); return; }
+  var dir; try { dir = await window.showDirectoryPicker({mode:'readwrite'}); } catch(e){ return; }
+  products = []; rootHandles = [dir]; var out = [];
+  await readHandle(dir, '', out);
+  out.forEach(function(o){ addFile(o.file, o.path, o.h, o.dir); });
+  finalizeProducts(); render(); buildThumbs();
+});
 $('#picker').addEventListener('change', function(){
   products = [];
   Array.prototype.forEach.call(this.files, function(f){ addFile(f, '/' + f.webkitRelativePath); });
-  finalizeProducts(); render();
+  finalizeProducts(); render(); buildThumbs();
 });
 
 // ===== 畫面 =====
-function thumb(fobj, first){ var img = document.createElement('img'); img.src = URL.createObjectURL(fobj.file); img.title = fobj.name; if (first) img.className='first'; return img; }
+function thumb(fobj, first, i, grp, j){
+  var w = document.createElement('span'); w.className = 'th';
+  var img = document.createElement('img'); img.src = fobj.thumb || BLANK; img.title = fobj.name; if (first) { img.className='first'; img.title = fobj.name + '（首圖）'; } img.draggable = false; img.dataset.i = i; img.dataset.grp = grp; img.dataset.j = j;
+  var x = document.createElement('b'); x.className = 'x'; x.textContent = '×'; x.title = '移除（不上傳）'; x.dataset.i = i; x.dataset.grp = grp; x.dataset.j = j;
+  w.appendChild(img); w.appendChild(x); return w;
+}
+document.addEventListener('click', function(e){ var x = e.target; if (!x.classList || !x.classList.contains('x') || !x.closest('#tbl')) return; var p = products[+x.dataset.i]; p.files[x.dataset.grp].splice(+x.dataset.j, 1); p.over20 = p.files.detail.length > 20; render(); });
+// 小縮圖（原檔動輒 8–9 MB，直接當縮圖會非常卡）
+var BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+function makeThumb(fobj){
+  if (fobj.thumb || fobj.thumbing) return Promise.resolve();
+  fobj.thumbing = true;
+  var done = function(c){ try { fobj.thumb = c.toDataURL('image/jpeg', 0.8); } catch(e){ fobj.thumb = BLANK; } fobj.thumbing = false; };
+  var draw = function(src, w, h){ var r = 120 / Math.max(w, h); var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w*r)); c.height = Math.max(1, Math.round(h*r)); c.getContext('2d').drawImage(src, 0, 0, c.width, c.height); done(c); };
+  if (window.createImageBitmap) {
+    return createImageBitmap(fobj.file, { resizeWidth: 160, resizeQuality: 'low' }).then(function(bm){ draw(bm, bm.width, bm.height); bm.close && bm.close(); }).catch(function(){ fobj.thumbing = false; return makeThumbImg(fobj); });
+  }
+  return makeThumbImg(fobj);
+}
+function makeThumbImg(fobj){
+  return new Promise(function(res){
+    var url = URL.createObjectURL(fobj.file); var im = new Image();
+    im.onload = function(){ var r = 120 / Math.max(im.width, im.height); var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.width*r)); c.height = Math.max(1, Math.round(im.height*r)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); try { fobj.thumb = c.toDataURL('image/jpeg', 0.8); } catch(e){ fobj.thumb = BLANK; } URL.revokeObjectURL(url); fobj.thumbing = false; res(); };
+    im.onerror = function(){ fobj.thumb = BLANK; fobj.thumbing = false; URL.revokeObjectURL(url); res(); };
+    im.src = url;
+  });
+}
+async function buildThumbs(){
+  var all = []; products.forEach(function(p){ all = all.concat(p.files.main, p.files.detail); });
+  var todo = all.filter(function(f){ return !f.thumb; });
+  for (var i=0; i<todo.length; i+=4){
+    await Promise.all(todo.slice(i, i+4).map(makeThumb));
+    // 把做好的縮圖填進去，不整張表重畫
+    Array.prototype.forEach.call(document.querySelectorAll('#tbl img'), function(im){ var p = products[+im.dataset.i]; if (!p) return; var f = p.files[im.dataset.grp] && p.files[im.dataset.grp][+im.dataset.j]; if (f && f.thumb && im.src !== f.thumb) im.src = f.thumb; });
+  }
+}
+// 表格縮圖拖曳排序（同一款內，商品圖／更多 之間互拖）
+var tDrag = null;
+function dropZoneOf(t){
+  if (!t || !t.closest) return null;
+  var z = t.closest('#tbl .thumbs'); if (z) return z;
+  var td = t.closest('#tbl td'); if (!td) return null;
+  var zs = td.querySelectorAll('.thumbs'); if (!zs.length) return null;
+  return zs[0];
+}
+function clearOver(){ Array.prototype.forEach.call(document.querySelectorAll('#tbl .thumbs.over, #tbl .th.ins-l, #tbl .th.ins-r'), function(z){ z.classList.remove('over'); z.classList.remove('ins-l'); z.classList.remove('ins-r'); }); }
+function showInsert(e, z){
+  Array.prototype.forEach.call(z.querySelectorAll('.th.ins-l, .th.ins-r'), function(t){ t.classList.remove('ins-l'); t.classList.remove('ins-r'); });
+  var ths = z.querySelectorAll('.th'); if (!ths.length) return;
+  var t = e.target && e.target.closest ? e.target.closest('.th') : null;
+  if (t) { var r = t.getBoundingClientRect(); t.classList.add(e.clientX > r.left + r.width/2 ? 'ins-r' : 'ins-l'); }
+  else ths[ths.length-1].classList.add('ins-r');
+}
+// 指標式拖曳（不用瀏覽器原生 drag，避免各平台行為不一致）
+var pd = null; // {i,grp,j,x,y,ghost,active}
+function isP1(f){ return /^P1(F)?(-1)?$/i.test(f.name.replace(/\.[^.]+$/, '').trim()); }
+function pinP1(p){ var k = p.files.main.findIndex(isP1); if (k > 0) { var f = p.files.main.splice(k, 1)[0]; p.files.main.unshift(f); } }
+function doMove(zone, th, clientX){
+  var i = +zone.dataset.i, grp = zone.dataset.grp; var p = products[i];
+  if (i !== pd.i) return;
+  var srcArr = p.files[pd.grp], dstArr = p.files[grp];
+  var it = srcArr.splice(pd.j, 1)[0]; var at = dstArr.length;
+  if (th) { var k = +th.querySelector('img').dataset.j; if (grp === pd.grp && k > pd.j) k--; var r = th.getBoundingClientRect(); at = clientX > r.left + r.width/2 ? k+1 : k; }
+  dstArr.splice(at, 0, it);
+  pinP1(p);
+  p.over20 = p.files.detail.length > 20;
+  render();
+}
+document.addEventListener('pointerdown', function(e){
+  var t = e.target; if (e.button !== 0 || !t || t.tagName !== 'IMG' || !t.closest('#tbl .thumbs')) return;
+  e.preventDefault();
+  pd = { i:+t.dataset.i, grp:t.dataset.grp, j:+t.dataset.j, x:e.clientX, y:e.clientY, src:t, active:false };
+});
+document.addEventListener('pointermove', function(e){
+  if (!pd) return;
+  if (!pd.active) { if (Math.abs(e.clientX-pd.x) + Math.abs(e.clientY-pd.y) < 6) return; pd.active = true;
+    var g = pd.src.cloneNode(); g.className = 'dragghost'; document.body.appendChild(g); pd.ghost = g; pd.src.closest('.th').classList.add('dragging'); document.body.classList.add('nodrag'); }
+  pd.ghost.style.left = (e.clientX - 22) + 'px'; pd.ghost.style.top = (e.clientY - 22) + 'px';
+  var under = document.elementFromPoint(e.clientX, e.clientY);
+  var z = dropZoneOf(under);
+  clearOver();
+  if (z && +z.dataset.i === pd.i) { z.classList.add('over'); showInsert({ target: under, clientX: e.clientX }, z); pd.zone = z; pd.th = under && under.closest ? under.closest('.th') : null; }
+  else { pd.zone = null; }
+});
+function endDrag(e){
+  if (!pd) return;
+  var was = pd; pd = null;
+  if (was.ghost) was.ghost.remove();
+  document.body.classList.remove('nodrag');
+  Array.prototype.forEach.call(document.querySelectorAll('#tbl .th.dragging'), function(t){ t.classList.remove('dragging'); });
+  clearOver();
+  if (was.active && was.zone) { pd = was; doMove(was.zone, was.th, e.clientX); pd = null; }
+}
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', endDrag);
 function render(){
   var tb = $('#tbl tbody'); tb.innerHTML = '';
   products.forEach(function(p, i){
@@ -368,13 +553,15 @@ function render(){
     } else if (p.searched) tdMatch = '<span class="tag red">找不到商品</span>';
     else tdMatch = '<span class="muted">尚未對照</span>';
 
-    var mainOk = p.files.main.length === 4 && p.files.main[0].order === 1;
+    var mainOk = p.files.main.length === 4;
     var mainCell = '<div class="thumbs"></div><div class="muted">' + p.files.main.map(function(f){return f.name;}).join('、') + (mainOk ? '' : ' <span class="tag red">需要 P1F-1＋2、3、4</span>') + '</div>';
-    var detCell = '<div class="thumbs"></div><div class="muted">' + p.files.detail.length + ' 張' + (p.over20 ? ' <span class="tag red">超過 20，已截斷</span>' : '') + (p.skipped.length ? ' ｜ 跳過 ' + p.skipped.length + ' 個檔' : '') + '</div>';
+    var unm = p.files.detail.filter(function(f){ return f.unmatched; }).length;
+    var detCell = '<div class="thumbs"></div><div class="muted">' + p.files.detail.length + ' 張' + (p.over20 ? ' <span class="tag red">超過 20，只上傳前 20 張</span>' : '') + (unm ? ' ｜ ' + unm + ' 張未照編號，排在最後' : '') + '</div>';
     tr.innerHTML = '<td>' + (i+1) + '</td><td><b>' + p.name + '</b>' + (p.color ? '<br><span class="tag">' + p.color + '</span>' : '') + '</td><td>' + tdMatch + '</td><td>' + mainCell + '</td><td>' + detCell + '</td><td class="st">' + (p.status || '') + '</td>';
     var tm = tr.querySelectorAll('.thumbs');
-    p.files.main.forEach(function(f,j){ tm[0].appendChild(thumb(f, j===0)); });
-    p.files.detail.slice(0,8).forEach(function(f){ tm[1].appendChild(thumb(f)); });
+    tm[0].dataset.i = i; tm[0].dataset.grp = 'main'; tm[1].dataset.i = i; tm[1].dataset.grp = 'detail';
+    p.files.main.forEach(function(f,j){ tm[0].appendChild(thumb(f, j===0, i, 'main', j)); });
+    p.files.detail.forEach(function(f,j){ var im = thumb(f, false, i, 'detail', j); if (j >= 20) im.firstChild.classList.add('over'); if (f.unmatched) { im.firstChild.classList.add('unm'); im.firstChild.title = f.name + '（未照編號命名，自動排最後）'; } tm[1].appendChild(im); });
     if (!mainOk && $('#optMain').checked) tr.classList.add('warn');
     if (p.searched && !p.match && !p.candidates.length) tr.classList.add('bad');
     tb.appendChild(tr);
@@ -385,7 +572,42 @@ function render(){
   $('#summary').textContent = products.length ? ('共 ' + products.length + ' 款/色，' + products.filter(function(p){return p.match;}).length + ' 款已對應') : '';
   $('#btnMatch').disabled = !products.length;
   $('#btnRun').disabled = !products.some(function(p){ return p.match; });
+  var canRename = products.some(function(p){ return p.files.main.concat(p.files.detail).some(function(f){ return f.h && f.dir; }); });
+  $('#btnRename').disabled = !canRename;
+  $('#btnRename').title = canRename ? '' : '要改檔名請點擊選擇資料夾（或在 Chrome 拖入資料夾）';
 }
+
+// ===== 改檔名（照表格目前順序）=====
+async function renameInDir(dir, h, oldName, newName){
+  if (oldName === newName) return h;
+  if (h.move){ try { await h.move(newName); return await dir.getFileHandle(newName); } catch(e){} }
+  var f = await h.getFile();
+  var nh = await dir.getFileHandle(newName, {create:true});
+  var w = await nh.createWritable(); await w.write(f); await w.close();
+  await dir.removeEntry(oldName);
+  return nh;
+}
+function extOf(n){ return (n.match(/\.[^.]+$/)||[''])[0].toLowerCase(); }
+$('#btnRename').addEventListener('click', async function(){
+  var plan = [], warn = 0;
+  products.forEach(function(p){
+    if (p.files.main.length && p.files.main.length !== 4) warn++;
+    p.files.main.forEach(function(f, i){ if (f.h && f.dir) plan.push({ f:f, to:(i===0 ? 'P1F-1' : String(i+1)) + extOf(f.name) }); });
+    p.files.detail.slice(0,20).forEach(function(f, i){ if (f.h && f.dir) plan.push({ f:f, to:'D-' + (i+1) + extOf(f.name) }); });
+  });
+  var changes = plan.filter(function(x){ return x.to !== x.f.name; });
+  if (!changes.length) { alert('檔名都已正確，不需要改'); return; }
+  if (!confirm('將改 ' + changes.length + ' 個檔名（商品圖 P1F-1、2、3、4；更多 D-1…）' + (warn ? '\n注意：有 ' + warn + ' 款商品圖不是 4 張' : '') + '。確定？')) return;
+  for (var r=0;r<rootHandles.length;r++){ try { if ((await rootHandles[r].queryPermission({mode:'readwrite'})) !== 'granted' && (await rootHandles[r].requestPermission({mode:'readwrite'})) !== 'granted') { alert('沒有寫入權限，無法改名'); return; } } catch(e){} }
+  this.disabled = true; clearLog(); log('改檔名 ' + changes.length + ' 個…');
+  var ok = 0;
+  try {
+    for (var i=0;i<changes.length;i++){ var c = changes[i]; c.tmp = '__vv' + i + extOf(c.f.name); c.f.h = await renameInDir(c.f.dir, c.f.h, c.f.name, c.tmp); }
+    for (var i2=0;i2<changes.length;i2++){ var c2 = changes[i2]; c2.f.h = await renameInDir(c2.f.dir, c2.f.h, c2.tmp, c2.to); c2.f.file = await c2.f.h.getFile(); log(c2.f.name + ' → ' + c2.to); c2.f.name = c2.to; ok++; }
+    log('✔ 完成，共改 ' + ok + ' 個檔名');
+  } catch(e){ log('✖ 改名失敗：' + e.message + '（已改的保留，請重新選擇資料夾檢查）'); alert('改名失敗：' + e.message); }
+  render();
+});
 
 // ===== 對照商品 =====
 $('#btnMatch').addEventListener('click', async function(){
@@ -447,13 +669,13 @@ $('#btnRun').addEventListener('click', async function(){
   if (!confirm('將為 ' + todo.length + ' 款商品放入圖片。若商品原本已有圖片，會被這次的圖片取代。確定？')) return;
   this.disabled = true; $('#btnMatch').disabled = true;
   clearLog(); var total = 0, done = 0;
-  todo.forEach(function(p){ total += (doMain ? p.files.main.length : 0) + (doDetail ? p.files.detail.length : 0); });
+  todo.forEach(function(p){ total += (doMain ? p.files.main.length : 0) + (doDetail ? Math.min(20, p.files.detail.length) : 0); });
   for (var i=0;i<todo.length;i++){
     var p = todo[i]; var idx = products.indexOf(p); var row = $('#row' + idx);
     p.status = '放圖中…'; row.querySelector('.st').textContent = p.status;
     try {
       if (doMain) {
-        if (p.files.main.length !== 4 || p.files.main[0].order !== 1) throw new Error('商品圖不是 P1F-1＋2、3、4，跳過整款');
+        if (p.files.main.length !== 4) throw new Error('商品圖不是 4 張，跳過整款');
         var urls = [];
         for (var k=0;k<p.files.main.length;k++){ urls.push(await uploadOne(p.files.main[k])); done++; setBar(done/total); row.querySelector('.st').textContent = '商品圖 ' + (k+1) + '/4'; }
         var r1 = await api('addImages', { productId: p.match.id, productTitle: p.match.title, type:'main', urls: urls, replace: true, backup: p.match.mainUrls, uploader: who });
@@ -461,8 +683,9 @@ $('#btnRun').addEventListener('click', async function(){
         log('✔ ' + p.match.title + ' 商品圖 ' + r1.count + ' 張');
       }
       if (doDetail && p.files.detail.length) {
+        var det = p.files.detail.slice(0,20);
         var durls = [];
-        for (var k2=0;k2<p.files.detail.length;k2++){ durls.push(await uploadOne(p.files.detail[k2])); done++; setBar(done/total); row.querySelector('.st').textContent = '更多圖 ' + (k2+1) + '/' + p.files.detail.length; }
+        for (var k2=0;k2<det.length;k2++){ durls.push(await uploadOne(det[k2])); done++; setBar(done/total); row.querySelector('.st').textContent = '更多圖 ' + (k2+1) + '/' + det.length; }
         var r2 = await api('addImages', { productId: p.match.id, productTitle: p.match.title, type:'detail', urls: durls, replace: true, backup: p.match.detailUrls, uploader: who });
         if (!r2.ok) throw new Error('掛更多圖失敗：' + JSON.stringify(r2.error).slice(0,200));
         log('✔ ' + p.match.title + ' 更多商品圖片 ' + r2.count + ' 張');
@@ -486,6 +709,7 @@ Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(t){
     $('#panel-desc').classList.toggle('hidden', t.dataset.tab !== 'desc');
     $('#panel-camp').classList.toggle('hidden', t.dataset.tab !== 'camp');
     $('#panel-mk').classList.toggle('hidden', t.dataset.tab !== 'mk');
+    $('#panel-np').classList.toggle('hidden', t.dataset.tab !== 'np');
   });
 });
 
@@ -717,6 +941,7 @@ $('#btnCats').addEventListener('click', async function(){
     var j = await api('categories', {}); catList = j.items;
     var sel = $('#campCat'); sel.innerHTML = '<option value="">（不加分類）</option>';
     catList.forEach(function(c){ var o=document.createElement('option'); o.value=c.id; o.textContent=c.name + (c.status && c.status!=='active' ? '（' + c.status + '）' : ''); sel.appendChild(o); });
+    var sel2 = $('#exCat'); sel2.innerHTML = '<option value="">（選活動分類）</option>'; catList.forEach(function(c){ var o=document.createElement('option'); o.value=c.id; o.textContent=c.name; sel2.appendChild(o); });
     $('#campMsg').textContent = '分類 ' + catList.length + ' 個';
   }catch(e){ $('#campMsg').textContent = '✖ ' + e.message; }
 });
@@ -925,6 +1150,235 @@ async function loadJobs(){
 }
 $('#btnJobs').addEventListener('click', loadJobs);
 
+// ===== 現有活動收尾（手動設定的活動）=====
+var exItems = [];
+var COMBO_RE = /組合價|套裝價/;
+$('#btnExLoad').addEventListener('click', async function(){
+  var catId = $('#exCat').value; if(!catId){ $('#exMsg').textContent = '請先按上方「載入分類」並選活動分類'; return; }
+  $('#exMsg').textContent = '讀取中…'; $('#btnExSchedule').disabled = true;
+  try{
+    var j = await api('productsByCategory', { categoryId: catId }); exItems = j.items || [];
+    var combo = exItems.filter(function(p){ return (p.tags||[]).some(function(t){ return COMBO_RE.test(t); }); }).length;
+    var tags = $('#exTags').value.split(/[,，]/).map(function(t){return t.trim();}).filter(Boolean);
+    var withTag = tags.length ? exItems.filter(function(p){ return tags.some(function(t){ return (p.tags||[]).indexOf(t) >= 0; }); }).length : 0;
+    $('#exMsg').textContent = '分類內 ' + exItems.length + ' 款' + (tags.length ? '，' + withTag + ' 款有標籤 ' + tags.join('/') : '') + '，' + combo + ' 款有組合價／套裝價標籤（不關不適用折扣）→ 收尾時需關閉不適用折扣 ' + (exItems.length - combo) + ' 款';
+    $('#btnExSchedule').disabled = !exItems.length;
+  }catch(e){ $('#exMsg').textContent = '✖ ' + e.message; }
+});
+$('#btnExSchedule').addEventListener('click', async function(){
+  var who = $('#who').value.trim(); if(!who){ alert('請填操作者名字'); return; }
+  var catId = $('#exCat').value, catName = $('#exCat').selectedOptions[0].textContent, end = $('#exEnd').value;
+  if(!end){ alert('請填結束時間'); return; }
+  var tags = $('#exTags').value.split(/[,，]/).map(function(t){return t.trim();}).filter(Boolean);
+  if(!confirm('將在 ' + end.replace('T',' ') + ' 後收尾「' + catName + '」共 ' + exItems.length + ' 款：移除分類' + (tags.length ? '、移除標籤 ' + tags.join('/') : '') + '，並列出需關閉不適用折扣的商品（組合價／套裝價除外）。確定？')) return;
+  this.disabled = true;
+  try{
+    var job = await api('scheduleCleanup', { title: catName, endAt: new Date(end).getTime(), revert: { category: true, tags: !!tags.length, excluded: true }, categoryId: catId, tags: tags, flashIds: [], by: who,
+      products: exItems.map(function(p){ var combo = (p.tags||[]).some(function(t){ return COMBO_RE.test(t); }); return { id: p.id, title: p.title, before: { category_ids: p.category_ids.filter(function(c){ return c !== catId; }), tags: (p.tags||[]).filter(function(t){ return tags.indexOf(t) < 0; }), is_excluded_promotion: combo ? true : false, status: p.status } }; }) });
+    $('#exMsg').textContent = '✔ 已建立收尾任務'; loadJobs();
+  }catch(e){ $('#exMsg').textContent = '✖ ' + e.message; this.disabled = false; }
+});
+
+// ===== 商品建檔 =====
+function logN(m){ var el=$('#logNp'); var t=new Date().toTimeString().slice(0,8); el.textContent += '\n[' + t + '] ' + m; el.scrollTop = el.scrollHeight; }
+function sheetId4(){ var m=/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec($('#sheetUrl4').value); return m?m[1]:''; }
+function sheetId5(){ var m=/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec($('#sheetUrl5').value); return m?m[1]:''; }
+try{ $('#sheetUrl4').value = localStorage.getItem('vv_sheet_np') || ''; $('#sheetUrl5').value = localStorage.getItem('vv_sheet') || ''; }catch(e){}
+async function loadTabsInto(id, sel, msg, key){
+  if(!id){ msg.textContent = '✖ 請貼上正確的 Google 試算表網址'; return; }
+  msg.textContent = '載入分頁中…';
+  try{
+    var j = await api('sheetTabs', {spreadsheetId:id});
+    sel.innerHTML = ''; j.tabs.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+    msg.textContent = j.title + '：' + j.tabs.length + ' 個分頁';
+    return j;
+  }catch(e){ msg.textContent = '✖ ' + e.message + ((e.data && e.data.email) ? '（機器人帳號 ' + e.data.email + '）' : ''); }
+}
+$('#btnTabs4').addEventListener('click', async function(){
+  try{ localStorage.setItem('vv_sheet_np', $('#sheetUrl4').value); }catch(e){}
+  var j = await loadTabsInto(sheetId4(), $('#sheetTab4'), $('#npMsg'));
+  if (j) { var pick = j.tabs.filter(function(t){ return /^新品貨況_\d{6}$/.test(t); }).sort().pop(); if (pick) $('#sheetTab4').value = pick; $('#btnLoadNp').disabled = false; }
+});
+$('#btnTabs5').addEventListener('click', async function(){ await loadTabsInto(sheetId5(), $('#sheetTab5'), $('#npMsg')); });
+var npCats = [];
+async function loadNpCats(){
+  $('#npCatMsg').textContent = '載入分類中…';
+  try{
+    var j = await api('categories', {}); npCats = j.items.filter(function(c){ return !c.status || c.status === 'active'; });
+    npCats.sort(function(a,b){ var pa = a.parent || a.id, pb = b.parent || b.id; if (pa !== pb) return pa < pb ? -1 : 1; return (a.parent ? 1 : 0) - (b.parent ? 1 : 0); });
+    var DEF = /^(ALL|NEW)$/i;
+    npBatchCats = npCats.filter(function(c){ return !c.parent && DEF.test(c.name.trim()); }).map(function(c){ return c.id; });
+    renderNpBatch();
+    $('#npCatMsg').textContent = '這批共用分類';
+  }catch(e){ $('#npCatMsg').textContent = '✖ ' + e.message; }
+}
+$('#btnCats4').addEventListener('click', loadNpCats);
+// 大類／中類 → 後台分類（模糊比對名稱）
+function npMatchCats(big, mid){
+  var norm = function(x){ return String(x||'').replace(/[\s+＋／/]/g,'').toLowerCase(); };
+  var out = [], miss = [];
+  var parents = npCats.filter(function(c){ return !c.parent; });
+  var parent = big ? parents.find(function(c){ var n = norm(c.name), b = norm(big); return n.indexOf(b) >= 0 || b.indexOf(n) >= 0; }) : null;
+  if (big && !parent) miss.push('大類「' + big + '」');
+  if (mid) {
+    var pool = parent ? npCats.filter(function(c){ return c.parent === parent.id; }) : npCats.filter(function(c){ return c.parent; });
+    var m = norm(mid);
+    var hit = pool.find(function(c){ return norm(c.name) === m; }) || pool.find(function(c){ return norm(c.name).indexOf(m) >= 0; }) || pool.find(function(c){ return m.indexOf(norm(c.name)) >= 0 && norm(c.name).length >= 2; });
+    if (hit) out.push(hit.id); else miss.push('中類「' + mid + '」');
+  }
+  if (!out.length && parent) out.push(parent.id);
+  return { ids: out, miss: miss };
+}
+function npExpand(ids){
+  // 選子分類時自動補上父分類與同層的 VIEW ALL
+  var out = []; var byId = {}; npCats.forEach(function(c){ byId[c.id] = c; });
+  var add = function(id){ if (id && byId[id] && out.indexOf(id) < 0) out.push(id); };
+  ids.forEach(function(id){
+    add(id); var c = byId[id]; var guard = 0;
+    while (c && c.parent && byId[c.parent] && guard++ < 5) {
+      npCats.forEach(function(sib){ if (sib.parent === c.parent && /^VIEW\s*ALL/i.test(sib.name.trim())) add(sib.id); });
+      add(c.parent); c = byId[c.parent];
+    }
+  });
+  return out;
+}
+var npBatchCats = [];
+function npCatOptions(exclude){
+  var byId = {}; npCats.forEach(function(c){ byId[c.id] = c; });
+  return npCats.filter(function(c){ return exclude.indexOf(c.id) < 0; }).map(function(c){ var pre = c.parent && byId[c.parent] ? '　└ ' : ''; return '<option value="' + c.id + '">' + pre + c.name + '</option>'; }).join('');
+}
+function renderNpBatch(){
+  var box = $('#npCats'); var byId = {}; npCats.forEach(function(c){ byId[c.id] = c; });
+  var auto = npExpand(npBatchCats).filter(function(id){ return npBatchCats.indexOf(id) < 0; });
+  box.innerHTML = npBatchCats.map(function(id, k){ return '<span class="tag">' + (byId[id] ? byId[id].name : id) + ' <b class="npbdel" data-k="' + k + '" style="cursor:pointer;color:var(--red)">×</b></span>'; }).join('')
+    + auto.map(function(id){ return '<span class="tag" style="opacity:.7" title="自動帶入">' + (byId[id] ? byId[id].name : id) + '</span>'; }).join('')
+    + '<select id="npBatchSel"><option value="">＋加分類</option>' + npCatOptions(npBatchCats) + '</select>';
+  $('#npBatchSel').addEventListener('change', function(){ if (this.value) npBatchCats.push(this.value); renderNpBatch(); });
+  Array.prototype.forEach.call(box.querySelectorAll('.npbdel'), function(x){ x.addEventListener('click', function(){ npBatchCats.splice(+this.dataset.k, 1); renderNpBatch(); }); });
+}
+function npSelectedCats(){ return npExpand(npBatchCats); }
+function parseYMD(v){ var m = /^(\d{2})(\d{2})(\d{2})$/.exec(String(v||'').trim()); if (m) return { y:2000+(+m[1]), m:+m[2], d:+m[3] }; var m2 = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/.exec(String(v||'')); if (m2) return { y:+m2[1], m:+m2[2], d:+m2[3] }; return null; }
+function tpeISO(ymd, dayOff, hhmm){ var t = hhmm.split(':'); var d = new Date(Date.UTC(ymd.y, ymd.m-1, ymd.d + dayOff, +t[0] - 8, +t[1])); return d.toISOString(); }
+var npRows = []; // {base, name, title, color, multi, sizes:[{size,sku,barcode}], price, date, extraCat, exists, result}
+$('#btnLoadNp').addEventListener('click', async function(){
+  if(!$('#sheetTab4').value){ $('#npMsg').textContent = '請先選分頁'; return; }
+  $('#npMsg').textContent = '讀取表單中…';
+  var rows; try{ rows = (await api('sheetRows', {spreadsheetId:sheetId4(), tab:$('#sheetTab4').value})).rows; }catch(e){ $('#npMsg').textContent = '✖ ' + e.message; return; }
+  if(!rows || rows.length<2){ $('#npMsg').textContent='表單沒有內容'; return; }
+  var h = rows[0];
+  var iName = colIndex(h, ['組頭名稱','名稱','商品名稱']), iColor = colIndex(h, ['顏色']), iSize = colIndex(h, ['尺寸','規格']), iSku = colIndex(h, ['產品代號','SKU']), iBar = colIndex(h, ['條碼對照','條碼']), iDate = colIndex(h, ['上架日期']);
+  if (iName<0 || iSku<0) { $('#npMsg').textContent = '找不到「組頭名稱」或「產品代號」欄位'; return; }
+  if (!npCats.length) { try { await loadNpCats(); } catch(e){} }
+  // 排程表價格
+  var priceMap = {};
+  if ($('#sheetTab5').value && sheetId5()) {
+    try {
+      var pr = (await api('sheetRows', {spreadsheetId:sheetId5(), tab:$('#sheetTab5').value})).rows || [];
+      var ph = pr[0] || [];
+      var findCol = function(keys){ for (var k=0;k<keys.length;k++){ for (var q=0;q<ph.length;q++){ if (String(ph[q]||'').replace(/\s/g,'').indexOf(keys[k]) >= 0) return q; } } return -1; };
+      var iPc = findCol(['貨號','款號','組頭']), iPp = findCol(['零售價','售價','原價']);
+      if (iPc < 0 || iPp < 0) logN('排程表找不到欄位：' + (iPc<0?'貨號 ':'') + (iPp<0?'零售價':'') + '（表頭：' + ph.join('、') + '）');
+      var iEn = -1; for (var q=0;q<ph.length;q++){ if (/英文/.test(ph[q]||'')) { iEn = q; break; } } if (iEn < 0) iEn = 16; // Q 欄
+      var iBig = findCol(['產品大類','大類']), iMid = findCol(['產品中類','中類']), iCost = findCol(['批價','成本']), iCombo = findCol(['組合價','套裝價']), iOrd = findCol(['呈現順序','順序']);
+      if (iPc>=0) pr.slice(1).forEach(function(r){ var code = String(r[iPc]||'').trim().split(/[-\s]/)[0]; if (!code) return; var v = iPp>=0 ? parseFloat(String(r[iPp]||'').replace(/[^\d.]/g,'')) : 0; var en = String(r[iEn]||'').trim(); priceMap[code] = { price: v || '', en: en, big: iBig>=0 ? String(r[iBig]||'').trim() : '', mid: iMid>=0 ? String(r[iMid]||'').trim() : '', cost: iCost>=0 ? (parseFloat(String(r[iCost]||'').replace(/[^\d.]/g,'')) || 0) : 0, combo: iCombo>=0 ? String(r[iCombo]||'').trim().split('\n')[0].trim() : '', ord: iOrd>=0 ? (parseFloat(r[iOrd]) || 0) : 0 }; });
+    } catch(e){ logN('排程表讀取失敗：' + e.message); }
+  }
+  // 依 組頭名稱+顏色 分組
+  var groups = {}, order = [];
+  rows.slice(1).forEach(function(r){
+    var name = String(r[iName]||'').trim(), sku = String(r[iSku]||'').trim(); if (!name || !sku) return;
+    var color = iColor>=0 ? String(r[iColor]||'').trim() : ''; var size = iSize>=0 ? String(r[iSize]||'').trim() : ''; var bar = iBar>=0 ? String(r[iBar]||'').trim() : '';
+    var key = name + '|' + color;
+    if (!groups[key]) { groups[key] = { base: sku.split('-')[0], name:name, color:color, sizes:[], date: iDate>=0 ? parseYMD(r[iDate]) : null, extraCats:[], result:'' }; order.push(key); }
+    groups[key].sizes.push({ size: size || 'F', sku: sku, barcode: bar });
+  });
+  var colorCount = {}; order.forEach(function(k){ var g = groups[k]; colorCount[g.name] = (colorCount[g.name]||0) + 1; });
+  npRows = order.map(function(k){ var g = groups[k]; g.multi = colorCount[g.name] > 1; g.title = g.multi && g.color ? g.name + '-' + g.color : g.name; var inf = priceMap[g.base] || {}; g.price = inf.price || ''; g.en = inf.en || ''; g.big = inf.big || ''; g.mid = inf.mid || ''; g.cost = inf.cost || 0; g.combo = inf.combo || ''; g.excl = !!g.combo; g.tag = g.combo; g.ord = inf.ord || 0; var mc = npMatchCats(g.big, g.mid); g.extraCats = mc.ids; g.catMiss = mc.miss; var cc = (g.sizes[0].sku.split('-')[1] || ''); g.link = g.base + (cc ? '-' + cc : ''); return g; });
+  npRows.sort(function(a,b){ return (b.ord||0) - (a.ord||0); });
+  // 檢查後台是否已存在
+  $('#npMsg').textContent = '對照後台是否已有同名商品…';
+  for (var i=0;i<npRows.length;i++){ var g = npRows[i]; try { var j = await api('search', { query: g.name }); g.exists = (j.items||[]).find(function(it){ return it.title === g.title; }) || null; } catch(e){} }
+  renderNp(); $('#npMsg').textContent = '讀到 ' + npRows.length + ' 個商品（' + npRows.filter(function(g){return g.exists;}).length + ' 個後台已存在會跳過）';
+});
+function renderNp(){
+  var tb = $('#tblNp tbody'); tb.innerHTML = '';
+  var pubDay = +$('#npPubDay').value, pubT = $('#npPubTime').value, saleDay = +$('#npSaleDay').value, saleT = $('#npSaleTime').value;
+  npRows.forEach(function(g, i){
+    var tr = document.createElement('tr');
+    var spec = g.sizes.map(function(s){ return (g.color ? g.color + ' ' : '') + s.size + '　<span class="muted">' + s.sku + (s.barcode ? ' ｜ ' + s.barcode : ' ｜ <b class="test">無條碼</b>') + '</span>'; }).join('<br>');
+    var when = g.date ? (g.date.m + '/' + g.date.d + '　<span class="muted">上架 ' + (pubDay ? '前一天' : '當天') + ' ' + pubT + '，銷售 ' + (saleDay ? '前一天' : '當天') + ' ' + saleT + '</span>') : '<b class="test">無上架日期</b>';
+    var catName = function(id){ var c = npCats.find(function(x){ return x.id===id; }); return c ? c.name : id; };
+    var auto = npExpand(g.extraCats).filter(function(id){ return g.extraCats.indexOf(id) < 0; });
+    var byId = {}; npCats.forEach(function(c){ byId[c.id] = c; });
+    var catSel = (g.big || g.mid ? '<div class="muted mini">' + [g.big, g.mid].filter(Boolean).join('／') + (g.catMiss && g.catMiss.length ? ' <b class="test">找不到 ' + g.catMiss.join('、') + '</b>' : '') + '</div>' : '') + g.extraCats.map(function(id, k){ return '<span class="tag">' + catName(id) + ' <b class="npxdel" data-i="' + i + '" data-k="' + k + '" style="cursor:pointer;color:var(--red)">×</b></span>'; }).join('')
+      + auto.map(function(id){ return '<span class="tag" style="opacity:.7" title="自動帶入">' + catName(id) + '</span>'; }).join('')
+      + '<select data-i="' + i + '" class="npx"><option value="">＋加分類</option>' + npCatOptions(g.extraCats) + '</select>';
+    tr.innerHTML = '<td>' + (i+1) + '</td><td><b>' + g.title + '</b><div class="muted">' + (g.en ? g.en : '<b class="test">無英文名稱</b>') + '</div><div class="muted">' + (g.ord ? '順序 ' + g.ord + ' ｜ ' : '') + '網址 ' + g.link + (g.multi ? ' ｜ 多色款' : '') + '</div></td><td>' + spec + '</td><td><input class="pr" data-i="' + i + '" value="' + (g.price||'') + '" placeholder="必填"><div class="muted mini">成本 ' + (g.cost||0) + '</div></td><td><label style="display:flex;gap:4px;align-items:center"><input type="checkbox" class="npex" data-i="' + i + '"' + (g.excl?' checked':'') + '> 不適用折扣</label><input class="nptag" data-i="' + i + '" style="width:120px;margin-top:4px;padding:4px;border:1px solid var(--line);border-radius:6px" value="' + (g.tag||'').replace(/"/g,'&quot;') + '" placeholder="標籤"></td><td>' + when + '</td><td>' + catSel + '</td><td class="st">' + (g.exists ? '－ 已存在' : (g.result || '')) + '</td>';
+    if (g.exists) tr.classList.add('done'); else if (!g.price || !g.date) tr.classList.add('warn');
+    if (g.result && /^✖/.test(g.result)) tr.classList.add('bad'); if (g.result && /^✔/.test(g.result)) tr.classList.add('done');
+    tb.appendChild(tr);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#tblNp input.pr'), function(inp){ inp.addEventListener('change', function(){ npRows[+this.dataset.i].price = parseFloat(this.value) || ''; renderNp(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#tblNp input.npex'), function(c){ c.addEventListener('change', function(){ npRows[+this.dataset.i].excl = this.checked; }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#tblNp input.nptag'), function(inp){ inp.addEventListener('change', function(){ npRows[+this.dataset.i].tag = this.value.trim(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#tblNp select.npx'), function(sel){ sel.addEventListener('change', function(){ if (this.value) npRows[+this.dataset.i].extraCats.push(this.value); renderNp(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#tblNp .npxdel'), function(x){ x.addEventListener('click', function(){ npRows[+this.dataset.i].extraCats.splice(+this.dataset.k, 1); renderNp(); }); });
+  $('#btnRunNp').disabled = !npRows.some(function(g){ return !g.exists && g.price && g.date; });
+}
+['#npPubDay','#npPubTime','#npSaleDay','#npSaleTime'].forEach(function(s){ $(s).addEventListener('change', function(){ if (npRows.length) renderNp(); }); });
+function slug(s){ return String(s).toLowerCase().replace(/[^a-z0-9一-鿿]+/g,'_'); }
+function buildProduct(g){
+  var cats = npSelectedCats().slice(); npExpand(g.extraCats || []).forEach(function(id){ if (cats.indexOf(id) < 0) cats.push(id); });
+  var pubDay = +$('#npPubDay').value, pubT = $('#npPubTime').value, saleDay = +$('#npSaleDay').value, saleT = $('#npSaleTime').value;
+  var color = g.color || '';
+  var useSize = g.sizes.length > 1 || (g.sizes[0] && g.sizes[0].size !== 'F');
+  var vo = []; if (color) vo.push({ key: 'c_' + slug(color), type: 'color', name_translations: { 'zh-hant': color } });
+  if (useSize) g.sizes.forEach(function(s){ vo.push({ key: 's_' + slug(s.size), type: 'size', name_translations: { 'zh-hant': s.size } }); });
+  var vars = g.sizes.map(function(s){ var key = []; if (color) key.push('c_' + slug(color)); if (useSize) key.push('s_' + slug(s.size)); var v = { key: key, sku: s.sku, quantity: 0 }; if (s.barcode) { v.barcode = s.barcode; v.gtin = s.barcode; } return v; });
+  var p = {
+    title_translations: g.en ? { 'zh-hant': g.title, en: g.en } : { 'zh-hant': g.title },
+    seo_title_translations: g.en ? { 'zh-hant': g.name, en: g.en } : { 'zh-hant': g.name },
+    link: g.link,
+    status: 'hidden', price: g.price, same_price: true, cost: g.cost || 0, weight: 0,
+    category_ids: cats, is_preorder: false, is_reminder_active: false, unlimited_quantity: false,
+    schedule_publish_at: tpeISO(g.date, pubDay, pubT), available_start_time: tpeISO(g.date, saleDay, saleT),
+    is_excluded_promotion: !!g.excl
+  };
+  if (g.tag) p.tags = g.tag;
+  if (vo.length) { p.variant_options = vo; p.variations = vars; p.all_variations = false; }
+  else { p.sku = g.sizes[0].sku; if (g.sizes[0].barcode) p.gtin = g.sizes[0].barcode; p.quantity = 0; }
+  return p;
+}
+$('#btnRunNp').addEventListener('click', async function(){
+  var who = $('#who').value.trim(); if (!who) { alert('請填操作者名字'); return; }
+  var todo = npRows.filter(function(g){ return !g.exists && g.price && g.date; });
+  var cats = npSelectedCats();
+  if (!confirm('將建立 ' + todo.length + ' 個商品（上架＋隱藏），共用分類 ' + cats.length + ' 個（另加各款自己的款別分類）。價格、SKU、條碼請先在表格確認。確定？')) return;
+  this.disabled = true; $('#btnLoadNp').disabled = true; $('#logNp').textContent=''; logN('開始建檔 ' + todo.length + ' 個…');
+  for (var i=0;i<todo.length;i++){
+    var g = todo[i]; g.result = '建立中…'; renderNp();
+    try {
+      var j = await api('createProduct', { product: buildProduct(g), by: who });
+      if (j.ok) { g.result = '✔ 已建立'; g.exists = { id: j.id }; g.newId = j.id;
+        if (g.tag) { try { var tg = await api('addTags', { productId: j.id, tags: [g.tag] }); if (!tg.ok) g.result += '（標籤失敗）'; } catch(e){} }
+        if (g.excl && !(j.now && j.now.is_excluded_promotion)) { g.needExcl = true; g.result += '（需開不適用折扣）'; }
+        logN('✔ ' + g.title + ' → ' + j.id); }
+      else { g.result = '✖ ' + (typeof j.error === 'string' ? j.error : JSON.stringify(j.error)).slice(0,160); logN('✖ ' + g.title + '：' + g.result); }
+    } catch(e){ g.result = '✖ ' + e.message; logN('✖ ' + g.title + '：' + e.message); }
+    renderNp(); setBar((i+1)/todo.length);
+  }
+  var needEx = npRows.filter(function(g){ return g.needExcl; });
+  logN('完成。商品為上架＋隱藏' + (needEx.length ? '；' + needEx.length + ' 款需用腳本開啟不適用折扣，按「不適用折扣腳本」' : '') + '。');
+  $('#btnExclNp').classList.toggle('hidden', !needEx.length);
+  $('#btnLoadNp').disabled = false;
+});
+
+$('#btnExclNp').addEventListener('click', function(){
+  var ids = npRows.filter(function(g){ return g.needExcl && g.newId; }).map(function(g){ return g.newId; });
+  if (!ids.length) return;
+  var code = exclScript(ids, true);
+  try{ navigator.clipboard.writeText(code).then(function(){ logN('腳本已複製（' + ids.length + ' 款），到 Shopline 後台 F12 → Console 貼上執行'); }, function(){ logN(code); }); }catch(e){ logN(code); }
+});
 // ===== 建立資料夾 =====
 function sheetId3(){ var m=/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec($('#sheetUrl3').value); return m?m[1]:''; }
 try{ $('#sheetUrl3').value = localStorage.getItem('vv_sheet') || ''; }catch(e){}
@@ -943,7 +1397,7 @@ var mkRows = [];
 function renderMk(){
   var tb = $('#tblMk tbody'); tb.innerHTML = '';
   mkRows.forEach(function(r,i){ var tr=document.createElement('tr'); if(r.result && r.result.indexOf('✖')===0) tr.classList.add('bad'); if(r.result && r.result.indexOf('✔')===0) tr.classList.add('done');
-    tr.innerHTML = '<td>'+(i+1)+'</td><td>'+r.name+'</td><td>'+(r.colors.length>1 ? r.colors.map(function(c){return '<span class="tag">'+c+'</span>';}).join(' ') : '<span class="muted">單色（'+(r.colors[0]||'—')+'），不建子資料夾</span>')+'</td><td class="st">'+(r.result||'')+'</td>'; tb.appendChild(tr); });
+    tr.innerHTML = '<td>'+(i+1)+'</td><td>'+r.name+'</td><td>'+(r.colors.length>1 ? r.colors.map(function(c){return '<span class="tag">'+c+'</span>';}).join(' ') : '<span class="muted">單色 '+(r.colors[0]||'—')+'</span>')+'</td><td class="st">'+(r.result||'')+'</td>'; tb.appendChild(tr); });
   $('#mkSummary').textContent = mkRows.length ? ('共 ' + mkRows.length + ' 款') : '';
   $('#btnMk').disabled = !mkRows.length;
 }

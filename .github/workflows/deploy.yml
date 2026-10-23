@@ -1,7 +1,8 @@
-name: Deploy to Firebase
+name: Deploy functions
 on:
   push:
     branches: [main]
+    paths: ["functions/**", "database.rules.json", "firebase.json", ".firebaserc", ".github/workflows/deploy.yml"]
   workflow_dispatch:
 jobs:
   deploy:
@@ -13,7 +14,11 @@ jobs:
           node-version: 22
       - name: Install function deps
         run: cd functions && npm install --no-audit --no-fund
-      - name: Deploy
-        run: npx --yes firebase-tools@14 deploy --only hosting,functions,database --project vvdouble-shopline --non-interactive --force
+      - name: Deploy functions + database rules
+        run: npx --yes firebase-tools@13 deploy --only functions,database --project vvdouble-shopline --non-interactive --force
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+      - name: Verify
+        run: |
+          sleep 10
+          curl -s "https://asia-east1-vvdouble-shopline.cloudfunctions.net/reels?op=version"
