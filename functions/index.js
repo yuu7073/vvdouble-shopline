@@ -727,7 +727,7 @@ exports.reels = onRequest(
             const mm = title.match(/^(.*?)[-－—–]\s*([^-－—–]{1,8})$/);
             const base = (mm ? mm[1] : title).trim();
             const color = mm ? mm[2].trim() : "";
-            const when = tw(it.schedule_publish_at || it.available_start_time || it.created_at);
+            const when = tw(it.available_start_time || it.schedule_publish_at || it.created_at);   // 開賣時間＝檔期日（排程上架常設在前一晚 22:00）
             const code = when ? `${String(when.m).padStart(2, "0")}${String(when.d).padStart(2, "0")}` : "0000";
             const tabKey = when ? `${when.y}-${code}` : "未排程";
             const g = groups[tabKey] = groups[tabKey] || { tab: when ? `${when.m}/${when.d} 上架` : "未排程", code, year: when ? when.y : 0, month: when ? when.m : 0, day: when ? when.d : 0, items: {} };
