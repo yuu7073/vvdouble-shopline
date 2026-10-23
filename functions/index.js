@@ -579,7 +579,7 @@ async function aiTitle(db, p, token) {
         body: JSON.stringify({
           model: "claude-sonnet-5-5",
           max_tokens: 1200,
-          thinking: { type: "disabled" },     // 新模型預設會先「思考」，300 token 全被思考吃掉就沒有標題
+          thinking: { type: "between_tools" },     // 這個模型關思考要用 between_tools（API 錯誤訊息指定的寫法）
           system: "你是台灣大尺碼女裝品牌 VV DOUBLE 的社群小編，為一支模特實穿影片寫 YouTube Shorts 標題。\n品名結構：《標籤》＋情境短語＋特徵＋品類，例如《獨家自訂》準時上課去荷葉邊設計寬鬆短袖襯衫 → 情境＝上課、特徵＝荷葉邊／寬鬆／短袖、品類＝襯衫。\n寫法：一句繁體中文 15–18 字，情境放前面、口語像朋友推薦；後半只點品類加一個特徵（例：早八也要可愛，荷葉邊襯衫），不要把品名整串抄進去。\n事實限制：情境、特徵、品類、材質感受只能來自品名與官網描述，描述沒寫的一律不寫、不猜（不寫透氣、顯瘦、修身這類沒出現的詞）；品類寫錯是最嚴重的錯誤。\n禁止：不寫怎麼搭配（不要出現 配、搭、搭配、疊穿 + 其他單品，因為你不知道影片裡怎麼搭）、不寫模特名字或誰穿、不寫品牌名、不抄情境短語整句、不用引號／井字標籤／emoji／驚嘆號。只輸出標題本身，一行一個。",
           messages: [{ role: "user", content: `請給 ${p.n || 3} 個不同角度的標題，一行一個，不要編號。\n${ctx}` }],
         }),
@@ -647,7 +647,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-24e" });
+        if (op === "version") return res.json({ reels: "2026-10-24f" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
