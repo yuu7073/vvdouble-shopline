@@ -647,7 +647,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-24h" });
+        if (op === "version") return res.json({ reels: "2026-10-25a" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -700,6 +700,26 @@ exports.reels = onRequest(
         case "aiTitle": {
           const titles = await aiTitle(db, req.body || {}, token);
           return res.json({ titles, ai_error: AI_LAST_ERROR || undefined });
+        }
+
+        case "errorReport": {
+          // 程式出錯自動回報（同事那邊不用截圖）；只留最近 200 筆
+          const b = req.body || {};
+          const rec = { ts: Date.now(), at: new Date().toISOString(), version: String(b.version || ""), computer: String(b.computer || ""), user: String(b.user || ""),
+            context: String(b.context || "").slice(0, 200), error: String(b.error || "").slice(0, 600), trace: String(b.trace || "").slice(0, 4000), log: String(b.log || "").slice(0, 8000) };
+          await db.ref("/reels_errors").push(rec);
+          const all = await db.ref("/reels_errors").orderByChild("ts").limitToFirst(50).get();
+          const cnt = (await db.ref("/reels_errors").get()).numChildren();
+          if (cnt > 200 && all.exists()) { const upd = {}; let k = cnt - 200; all.forEach((c) => { if (k-- > 0) upd[c.key] = null; }); await db.ref("/reels_errors").update(upd); }
+          return res.json({ ok: true });
+        }
+
+        case "errorList": {
+          const snap = await db.ref("/reels_errors").orderByChild("ts").limitToLast(Number(req.body.n) || 30).get();
+          const items = [];
+          snap.forEach((c) => { const v = c.val(); items.push({ id: c.key, ...v, log: undefined, trace: (v.trace || "").slice(-1500) }); });
+          items.sort((a, b) => b.ts - a.ts);
+          return res.json({ ok: true, items });
         }
 
         case "upcoming": {
