@@ -483,6 +483,60 @@ exports.shopline = onRequest(
 
 
 const SELF_URL = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/reels";
+
+// ---------- LINE 官方帳號推播（每日摘要、錯誤即時通知） ----------
+async function linePush(db, text) {
+  const tkS = await db.ref("/config/lineToken").get();
+  const token = tkS.exists() ? tkS.val() : "";
+  if (!token) return { ok: false, error: "沒有設定 LINE token" };
+  const tgS = await db.ref("/line/targets").get();
+  const targets = tgS.exists() ? Object.keys(tgS.val()) : [];
+  if (!targets.length) return { ok: false, error: "機器人還沒被加進任何群組／好友" };
+  let sent = 0; const errors = [];
+  for (const to of targets) {
+    try {
+      const r = await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ to, messages: [{ type: "text", text: String(text).slice(0, 4900) }] }),
+      });
+      if (r.ok) sent++; else errors.push(`${to.slice(0, 6)}… ${r.status} ${(await r.text()).slice(0, 120)}`);
+    } catch (e) { errors.push(String(e)); }
+  }
+  return { ok: sent > 0, sent, targets: targets.length, errors };
+}
+
+function twDate(ts) { return new Date(ts + 8 * 3600000).toISOString().slice(0, 10); }
+
+async function buildDailySummary(db) {
+  const now = Date.now(), since = now - 24 * 3600000;
+  const evS = await db.ref("/reels_events").orderByChild("ts").startAt(since).get();
+  const errS = await db.ref("/reels_errors").orderByChild("ts").startAt(since).get();
+  const ev = []; evS.forEach((c) => { ev.push(c.val()); });
+  const errs = []; errS.forEach((c) => { errs.push(c.val()); });
+  const by = (k) => ev.filter((e) => e.kind === k);
+  const names = (list) => [...new Set(list.map((e) => e.name).filter(Boolean))];
+  const drafts = by("draft"), exps = by("export"), ups = by("upload");
+  const pending = names(exps).filter((n) => !names(ups).includes(n));
+  const who = [...new Set(ev.map((e) => e.by).filter(Boolean))];
+  const lines = [`📋 實穿影片 ${twDate(since)}～今天`, ``,
+    `產生草稿 ${drafts.length} 支`, `匯出成品 ${exps.length} 支`, `上傳 YouTube＋商品頁 ${ups.length} 支`];
+  if (pending.length) lines.push(``, `已匯出還沒上傳：`, ...pending.slice(0, 10).map((n) => `・${n}`));
+  if (errs.length) lines.push(``, `⚠ 錯誤 ${errs.length} 則：`, ...errs.slice(-5).map((e) => `・${e.computer || e.user || ""} ${e.context || ""}：${(e.error || "").slice(0, 60)}`));
+  if (who.length) lines.push(``, `操作：${who.join("、")}`);
+  if (!ev.length && !errs.length) lines.push(``, `（這 24 小時沒有動作）`);
+  return lines.join("\n");
+}
+
+exports.reelsDaily = onSchedule(
+  { schedule: "every day 09:00", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 120, memory: "256MiB" },
+  async () => {
+    const db = admin.database();
+    const text = await buildDailySummary(db);
+    const r = await linePush(db, text);
+    console.log("daily summary:", JSON.stringify(r));
+  }
+);
+
 const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
 const EMBED_MARK = "vv-reel-embed";
 
@@ -647,12 +701,34 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-25a" });
+        if (op === "version") return res.json({ reels: "2026-10-25b" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
         return res.status(500).send(page("發生錯誤", String(e.message || e)));
       }
+    }
+
+    // ---------- LINE webhook（機器人被加進群組／好友時記下對象） ----------
+    if (req.query.op === "line") {
+      if (req.method !== "POST") return res.status(200).send("ok");
+      try {
+        const secS = await db.ref("/config/lineSecret").get();
+        const secret = secS.exists() ? secS.val() : "";
+        if (secret) {
+          const crypto = require("crypto");
+          const sig = crypto.createHmac("sha256", secret).update(req.rawBody || Buffer.from("")).digest("base64");
+          if (sig !== req.get("x-line-signature")) return res.status(403).send("bad signature");
+        }
+        for (const ev of (req.body || {}).events || []) {
+          const src = ev.source || {};
+          const id = src.groupId || src.roomId || src.userId;
+          if (!id) continue;
+          if (ev.type === "leave" || ev.type === "unfollow") await db.ref(`/line/targets/${id}`).remove();
+          else if (["join", "follow", "message", "memberJoined"].includes(ev.type)) await db.ref(`/line/targets/${id}`).set({ type: src.type || "", at: Date.now() });
+        }
+      } catch (e) { console.error("line webhook", e); }
+      return res.status(200).send("ok");
     }
 
     // ---------- 程式呼叫 ----------
@@ -702,12 +778,49 @@ exports.reels = onRequest(
           return res.json({ titles, ai_error: AI_LAST_ERROR || undefined });
         }
 
+        case "lineSetup": {
+          const { lineToken, lineSecret } = req.body;
+          if (typeof lineToken === "string" && lineToken.trim()) await db.ref("/config/lineToken").set(lineToken.trim());
+          if (typeof lineSecret === "string") await db.ref("/config/lineSecret").set(lineSecret.trim());
+          const tgS = await db.ref("/line/targets").get();
+          return res.json({ ok: true, targets: tgS.exists() ? tgS.numChildren() : 0, webhook: `${SELF_URL}?op=line` });
+        }
+
+        case "linePing": {
+          const tkS = await db.ref("/config/lineToken").get();
+          const tgS = await db.ref("/line/targets").get();
+          const info = { has_token: tkS.exists() && !!tkS.val(), targets: tgS.exists() ? tgS.numChildren() : 0, webhook: `${SELF_URL}?op=line` };
+          if (!req.body.send) return res.json({ ok: true, ...info });
+          const r = await linePush(db, req.body.text || `✅ VV 實穿草稿產生器 已連上 LINE（${new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}）`);
+          return res.json({ ...info, ...r });
+        }
+
+        case "lineSummaryNow": {
+          const text = await buildDailySummary(db);
+          const r = await linePush(db, text);
+          return res.json({ ...r, text });
+        }
+
+        case "event": {
+          // 程式回報動作（產草稿／匯出／上傳），每日摘要用
+          const b = req.body || {};
+          await db.ref("/reels_events").push({ ts: Date.now(), kind: String(b.kind || "").slice(0, 20), name: String(b.name || "").slice(0, 120),
+            by: String(b.by || "").slice(0, 40), layout: String(b.layout || "").slice(0, 20), extra: String(b.extra || "").slice(0, 200) });
+          if (Math.random() < 0.05) {   // 偶爾清 30 天前的
+            const old = await db.ref("/reels_events").orderByChild("ts").endAt(Date.now() - 30 * 86400000).get();
+            const upd = {}; old.forEach((c) => { upd[c.key] = null; });
+            if (Object.keys(upd).length) await db.ref("/reels_events").update(upd);
+          }
+          return res.json({ ok: true });
+        }
+
         case "errorReport": {
           // 程式出錯自動回報（同事那邊不用截圖）；只留最近 200 筆
           const b = req.body || {};
           const rec = { ts: Date.now(), at: new Date().toISOString(), version: String(b.version || ""), computer: String(b.computer || ""), user: String(b.user || ""),
             context: String(b.context || "").slice(0, 200), error: String(b.error || "").slice(0, 600), trace: String(b.trace || "").slice(0, 4000), log: String(b.log || "").slice(0, 8000) };
           await db.ref("/reels_errors").push(rec);
+          linePush(db, `⚠ 實穿草稿產生器出錯\n${rec.computer || rec.user}（v${rec.version}）\n${rec.context}\n${rec.error.slice(0, 200)}`).catch(() => {});
           const all = await db.ref("/reels_errors").orderByChild("ts").limitToFirst(50).get();
           const cnt = (await db.ref("/reels_errors").get()).numChildren();
           if (cnt > 200 && all.exists()) { const upd = {}; let k = cnt - 200; all.forEach((c) => { if (k-- > 0) upd[c.key] = null; }); await db.ref("/reels_errors").update(upd); }
