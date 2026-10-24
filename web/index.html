@@ -1406,24 +1406,29 @@ $('#btnLoadMk').addEventListener('click', async function(){
   $('#mkMsg').textContent = '讀取表單中…';
   var rows; try{ rows = (await api('sheetRows', {spreadsheetId:sheetId3(), tab:$('#sheetTab3').value})).rows; }catch(e){ $('#mkMsg').textContent = '✖ ' + e.message; return; }
   if(rows.length<2){ $('#mkMsg').textContent='表單沒有內容'; return; }
-  var header = rows[0], iName = colIndex(header, ['名稱','商品名稱','品名']), iColor = colIndex(header, ['顏色','色','顏色/規格']);
+  var header = rows[0], iName = colIndex(header, ['名稱','商品名稱','品名']), iColor = colIndex(header, ['顏色','色','顏色/規格']), iCode = colIndex(header, ['組頭','貨號','款號']);
   if(iName<0){ $('#mkMsg').textContent='找不到「名稱」欄位'; return; }
-  mkRows = [];
+  if(iCode<0){ $('#mkMsg').textContent='找不到「貨號／組頭」欄位，資料夾名稱需要貨號（品名_貨號）'; return; }
+  mkRows = []; var noCode = 0;
   rows.slice(1).forEach(function(r){ var name=(r[iName]||'').trim().replace(/[\\/:*?"<>|]/g,'');
-    if(!name || mkRows.some(function(x){return x.name===name;})) return;
+    var code = String(r[iCode]||'').trim().toUpperCase().slice(0,8);
+    if(!name) return;
+    if(!code){ noCode++; return; }
+    var full = name + '_' + code;
+    if(mkRows.some(function(x){return x.name===full;})) return;
     var colors = iColor>=0 ? String(r[iColor]||'').split(/[\n,，、]/).map(function(c){return c.trim();}).filter(Boolean) : [];
-    mkRows.push({name:name, colors:colors, result:''}); });
-  renderMk(); $('#mkMsg').textContent = '讀到 ' + mkRows.length + ' 款，按右邊按鈕選擇要建立的位置';
+    mkRows.push({name:full, colors:colors, result:''}); });
+  renderMk(); $('#mkMsg').textContent = '讀到 ' + mkRows.length + ' 款（品名_貨號）' + (noCode ? '，' + noCode + ' 列沒有貨號已略過' : '') + '，按右邊按鈕選擇要建立的位置';
 });
 $('#btnMk').addEventListener('click', async function(){
   if(!window.showDirectoryPicker){ alert('這個瀏覽器不支援直接建立資料夾，請用 Chrome 或 Edge'); return; }
   var dir; try{ dir = await window.showDirectoryPicker({mode:'readwrite'}); }catch(e){ return; }
   if(!confirm('將在「' + dir.name + '」底下建立 ' + mkRows.length + ' 款商品資料夾（已存在的跳過）。確定？')) return;
-  var existing = {}; for await (var [n, h] of dir.entries()) { if(h.kind==='directory') existing[n.replace(/^OK\s*/i,'').trim()] = n; }
+  var existing = {}; for await (var [n, h] of dir.entries()) { if(h.kind==='directory'){ var base = n.replace(/^OK\s*/i,'').trim(); existing[base] = n; existing[base.replace(/_[0-9A-Z]{6,10}$/i,'')] = n; } }
   var made = 0, skipped = 0;
   for (var i=0;i<mkRows.length;i++){ var r = mkRows[i];
     try{
-      if(existing[r.name]){ r.result = '－ 已存在（' + existing[r.name] + '）'; skipped++; }
+      if(existing[r.name] || existing[r.name.replace(/_[0-9A-Z]{6,10}$/i,'')]){ r.result = '－ 已存在（' + (existing[r.name] || existing[r.name.replace(/_[0-9A-Z]{6,10}$/i,'')]) + '）'; skipped++; }
       else { var ph = await dir.getDirectoryHandle(r.name, {create:true}); made++;
         if(r.colors.length>1){ for (var k=0;k<r.colors.length;k++){ await ph.getDirectoryHandle(r.colors[k], {create:true}); made++; } }
         r.result = '✔ 已建立'; }
