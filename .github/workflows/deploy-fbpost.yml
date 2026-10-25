@@ -35,6 +35,7 @@ jobs:
         run: npx --yes firebase-tools@13 deploy --only functions:fbpost --project vvdouble-shopline --non-interactive --force
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GOOGLE_CLOUD_QUOTA_PROJECT: vvdouble-shopline
       - name: Verify
         if: steps.chk.outputs.skip == 'false'
         run: |
