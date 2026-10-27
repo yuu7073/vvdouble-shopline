@@ -32,7 +32,7 @@ jobs:
         run: cd functions && npm install --no-audit --no-fund
       - name: Deploy function (codebase fbpost only)
         if: steps.chk.outputs.skip == 'false'
-        run: npx --yes firebase-tools@13 deploy --only functions:fbpost --project vvdouble-shopline --non-interactive --force
+        run: npx --yes firebase-tools@13 deploy --only functions:fbpost,functions:fbpostQueue --project vvdouble-shopline --non-interactive --force
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           GOOGLE_CLOUD_QUOTA_PROJECT: vvdouble-shopline
