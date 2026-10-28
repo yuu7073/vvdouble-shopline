@@ -29,14 +29,25 @@ const BRAND_SYS = `你是 VV DOUBLE（台灣大尺碼女裝品牌）的資深美
 11. 賣點 slogan 與三標籤 tags3：可用「修飾身型」「修身」「順身」等（這是允許的）。
 目標客群稱呼：棉花糖女孩、肉肉女孩。
 四段定義：
-- tag：情境標籤，# 開頭短句（如 #不修邊幅、#剛剛好的浪漫），6～10 字。
-- title：商品大標，重寫乾淨、約 10～16 字。
-- slogan：一句賣點，一句話帶感覺，可用驚嘆號，約 10～16 字。
-- tags3：三個標籤，特性｜穿法或尺碼｜族群感，各 4～6 字（盡量精簡，整行加起來不要太長）。
-只輸出 JSON，格式：{"tag":"...","title":"...","slogan":"...","tags3":["...","...","..."]}，不要任何其他文字。`;
+- tag：情境標籤，# 開頭短句（如 #不修邊幅、#剛剛好的浪漫），# 之後 4～6 字。
+- title：商品大標，重寫乾淨，拆成兩行、語意自然斷句，每行 4～6 字（例：["胸口綁帶坎肩","針織外套"]）。
+- slogan：一句賣點，一句話帶感覺，可用驚嘆號，8～12 字，只能一行。
+- tags3：三個標籤，特性｜穿法或尺碼｜族群感，每個 4～5 字（例：["疊穿搭配","不挑身型","日常慵懶感"]）。
+字數是硬限制，做圖時每段都只能排在一行，不可超過。
+只輸出 JSON，格式：{"tag":"...","title":["...","..."],"slogan":"...","tags3":["...","...","..."]}，不要任何其他文字。`;
 
-async function anthropicCopy(key, title, desc, mode) {
-  const user = `取向：${mode || "新品介紹"}\nShopline 品名：${title}\n商品描述：${(desc || "").slice(0, 500)}`;
+const LIMITS = { tag: 7, titleLine: 6, slogan: 12, tagItem: 5 };
+function copyTooLong(o) {
+  const t = (o.tag || "").replace(/^#/, "");
+  if (t.length > LIMITS.tag) return true;
+  if ((o.titleLines || []).some((l) => l.length > LIMITS.titleLine)) return true;
+  if ((o.slogan || "").length > LIMITS.slogan + 1) return true; // 允許標點 1 字
+  if ((o.tags3 || []).some((x) => x.length > LIMITS.tagItem)) return true;
+  return false;
+}
+
+async function anthropicCopyOnce(key, title, desc, mode, extraNote) {
+  const user = `取向：${mode || "新品介紹"}\nShopline 品名：${title}\n商品描述：${(desc || "").slice(0, 500)}${extraNote ? "\n\n" + extraNote : ""}`;
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -48,9 +59,22 @@ async function anthropicCopy(key, title, desc, mode) {
   const m = txt.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("AI 回傳格式異常");
   const o = JSON.parse(m[0]);
-  let tag = o.tag || "";
+  let tag = (o.tag || "").trim();
   if (tag && tag[0] !== "#") tag = "#" + tag;
-  return { tag, title: o.title || "", slogan: o.slogan || "", tags3: (o.tags3 || []).slice(0, 3) };
+  let titleLines = Array.isArray(o.title) ? o.title : String(o.title || "").split(/[\n／/]/);
+  titleLines = titleLines.map((s) => String(s).trim()).filter(Boolean).slice(0, 2);
+  const tags3 = (o.tags3 || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 3);
+  return { tag, titleLines, slogan: (o.slogan || "").trim(), tags3 };
+}
+
+async function anthropicCopy(key, title, desc, mode) {
+  let o = await anthropicCopyOnce(key, title, desc, mode);
+  if (copyTooLong(o)) {
+    // 超過字數：帶著上一版結果要求縮短，重生一次
+    const note = `上一版太長，不符合字數硬限制，請縮短後重寫：${JSON.stringify({ tag: o.tag, title: o.titleLines, slogan: o.slogan, tags3: o.tags3 })}`;
+    o = await anthropicCopyOnce(key, title, desc, mode, note);
+  }
+  return { tag: o.tag, title: o.titleLines.join("\n"), titleLines: o.titleLines, slogan: o.slogan, tags3: o.tags3 };
 }
 
 const SL = "https://open.shopline.io/v1";
