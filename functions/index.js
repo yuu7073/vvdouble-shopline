@@ -5,6 +5,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { GoogleAuth } = require("google-auth-library");
+const { buildSeo } = require("./seo");
 
 admin.initializeApp();
 
@@ -135,6 +136,34 @@ exports.cleanupHourly = onSchedule(
   }
 );
 
+// ===== 商品 SEO 自動產生（標題＝品名去顏色＋｜大尺碼女裝 VV DOUBLE；描述＝品類＋重點＋尺寸）=====
+const SEO_FIELDS = ["id", "title_translations", "description_translations", "variant_options", "seo_title_translations", "seo_description_translations", "status"];
+async function applySeo(token, db, p, by) {
+  const seo = buildSeo(p);
+  if (!seo.title) return { id: p.id, skipped: "沒有品名" };
+  const curT = (p.seo_title_translations || {})["zh-hant"] || "";
+  const curD = (p.seo_description_translations || {})["zh-hant"] || "";
+  if (curT === seo.title && curD === seo.description) return { id: p.id, same: true, title: seo.title, description: seo.description };
+  const bk = db.ref(`/seoBackups/${p.id}`);
+  const had = await bk.get();
+  if (!had.exists()) await bk.set({ title: curT, description: curD, at: Date.now(), by: by || "" });
+  const json = {
+    seo_title_translations: Object.assign({}, p.seo_title_translations || {}, { "zh-hant": seo.title }),
+    seo_description_translations: Object.assign({}, p.seo_description_translations || {}, { "zh-hant": seo.description }),
+  };
+  const r = await slFetch(token, `/products/${p.id}`, { method: "PUT", json });
+  const ok = r.status === 200 || r.status === 201;
+  return { id: p.id, ok, title: seo.title, description: seo.description, error: ok ? null : r.body };
+}
+async function autoSeo(token, db, productId, by) {
+  try {
+    const qs = SEO_FIELDS.map((f) => "fields[]=" + f).join("&");
+    const g = await slFetch(token, `/products/${productId}?${qs}`);
+    if (g.status !== 200) return { ok: false, error: "讀不到商品" };
+    return await applySeo(token, db, g.body, by);
+  } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
+
 exports.shopline = onRequest(
   {
     region: "asia-east1",
@@ -243,7 +272,8 @@ exports.shopline = onRequest(
           const ok = r.status === 200 || r.status === 201;
           if (ok) await db.ref(`/descUpdates/${productId}`).set({ title: productTitle || "", len: html.length, at: Date.now(), by: uploader || "" });
           const saved = ok ? (((r.body.description_translations||{})["zh-hant"])||"").length : null;
-          return res.json({ status: r.status, ok, saved, error: ok ? null : r.body });
+          const seo = ok ? await autoSeo(token, db, productId, uploader) : null;
+          return res.json({ status: r.status, ok, saved, seo, error: ok ? null : r.body });
         }
 
         case "whoami": {
@@ -378,7 +408,8 @@ exports.shopline = onRequest(
             chk = c.body;
             await db.ref(`/createdProducts/${id}`).set({ at: Date.now(), by: by || "", title: (product.title_translations || {})["zh-hant"] || "", skus: (product.variations || []).map((v) => v.sku) });
           }
-          return res.json({ status: r.status, ok, id: id || null, now: chk, error: ok ? null : r.body });
+          const seo = id ? await autoSeo(token, db, id, by) : null;
+          return res.json({ status: r.status, ok, id: id || null, now: chk, seo, error: ok ? null : r.body });
         }
 
         case "productsByCategory": {
@@ -456,6 +487,61 @@ exports.shopline = onRequest(
             details: (ps.price_details || []).map((d) => ({ variation_key: d.variation_key, price_sale: d.price_sale ? d.price_sale.dollars : null })),
           }));
           return res.json({ status: r.status, id: b.id, title: b.title, product_ids: b.product_ids || [], price_sets: sets });
+        }
+
+        case "seoPreview": {
+          // 用品名搜尋，回傳會套用的 SEO（不寫入）
+          const q = encodeURIComponent(req.body.query || "");
+          const qs = SEO_FIELDS.map((f) => "fields[]=items." + f).join("&");
+          const r = await slFetch(token, `/products/search?query=${q}&per_page=10&${qs}`);
+          const items = (r.body.items || []).map((p) => {
+            const s = buildSeo(p);
+            return { id: p.id, name: (p.title_translations || {})["zh-hant"] || "", oldTitle: (p.seo_title_translations || {})["zh-hant"] || "", oldDesc: (p.seo_description_translations || {})["zh-hant"] || "", title: s.title, description: s.description };
+          });
+          return res.json({ status: r.status, items });
+        }
+
+        case "seoBatch": {
+          // 全站（上架中商品）一頁一頁跑：page 從 1 開始，回傳 totalPages 讓網頁接著叫下一頁
+          const page = Math.max(1, Number(req.body.page) || 1);
+          const per = Math.min(50, Math.max(5, Number(req.body.perPage) || 25));
+          const qs = SEO_FIELDS.map((f) => "fields[]=items." + f).join("&");
+          const r = await slFetch(token, `/products/search?status=active&page=${page}&per_page=${per}&${qs}`);
+          if (r.status !== 200) return res.status(502).json({ error: "讀取商品失敗", detail: r.body });
+          const items = (r.body.items || []).filter((p) => p.status !== "removed");
+          const results = [];
+          for (let i = 0; i < items.length; i += 5) {
+            const part = await Promise.all(items.slice(i, i + 5).map((p) => applySeo(token, db, p, req.body.by).catch((e) => ({ id: p.id, ok: false, error: String(e.message || e) }))));
+            part.forEach((x, k) => { x.name = ((items[i + k].title_translations || {})["zh-hant"]) || ""; });
+            results.push(...part);
+          }
+          const pg = r.body.pagination || {};
+          return res.json({ page, totalPages: pg.total_pages || page, total: pg.total_count || null, results });
+        }
+
+        case "seoRestore": {
+          // 還原單一商品到批次前的 SEO
+          const id = req.body.productId;
+          const s = await db.ref(`/seoBackups/${id}`).get();
+          if (!s.exists()) return res.status(404).json({ error: "沒有備份" });
+          const b = s.val();
+          const cur = await slFetch(token, `/products/${id}?fields[]=seo_title_translations&fields[]=seo_description_translations`);
+          const json = {
+            seo_title_translations: Object.assign({}, cur.body.seo_title_translations || {}, { "zh-hant": b.title || "" }),
+            seo_description_translations: Object.assign({}, cur.body.seo_description_translations || {}, { "zh-hant": b.description || "" }),
+          };
+          const r = await slFetch(token, `/products/${id}`, { method: "PUT", json });
+          return res.json({ ok: r.status === 200 || r.status === 201 });
+        }
+
+        case "seoStatus": {
+          const s = await db.ref("/seoRun").get();
+          return res.json(s.exists() ? s.val() : {});
+        }
+
+        case "seoMark": {
+          await db.ref("/seoRun").set({ at: Date.now(), by: req.body.by || "", summary: req.body.summary || "" });
+          return res.json({ ok: true });
         }
 
         case "lastUpload": {
