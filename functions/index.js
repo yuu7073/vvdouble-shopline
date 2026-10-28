@@ -11,6 +11,47 @@ admin.initializeApp();
 
 const SHOPLINE_TOKEN = defineSecret("SHOPLINE_TOKEN");
 const TOOL_PASSWORD = defineSecret("TOOL_PASSWORD");
+const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
+
+// 美編整合工具 · 商品文案 AI 生成（P1 四段）品牌鐵律 prompt
+const BRAND_SYS = `你是 VV DOUBLE（台灣大尺碼女裝品牌）的資深美編文案。根據商品資料，生成「P1 做圖參考」的四段文字。
+品牌文案鐵律（務必全部遵守）：
+1. 絕不販賣身形焦慮，不先戳痛點再給解法。
+2. 禁用字：顯胖、遮肉、藏肉、修飾缺點。
+3. 「顯瘦」不可當賣點。
+4. 正向框架：舒適、合身、自在；衣服配合人，不是人配合衣服。
+5. 不提競品、不做比較或對比抬高品牌（不要「不是放大版」這類）。
+6. 永久禁用破折號「——」。
+7. 語氣口語、溫暖、親切、生動輕快活潑，不要 AI 感、不要落落長。
+8. 不做負面行銷、不做飢餓行銷（不寫「最後N件」「再不買就沒了」）。
+9. 不帶入價格。
+10. 商品大標 title：把 Shopline 品名的《獨家自訂》等前綴、顏色、「顯瘦」去掉並重寫乾淨；大標不得出現「顯瘦」「修飾」。
+11. 賣點 slogan 與三標籤 tags3：可用「修飾身型」「修身」「順身」等（這是允許的）。
+目標客群稱呼：棉花糖女孩、肉肉女孩。
+四段定義：
+- tag：情境標籤，# 開頭短句（如 #不修邊幅、#剛剛好的浪漫），6～10 字。
+- title：商品大標，重寫乾淨、約 10～16 字。
+- slogan：一句賣點，一句話帶感覺，可用驚嘆號，約 10～16 字。
+- tags3：三個標籤，特性｜穿法或尺碼｜族群感，各 4～6 字（盡量精簡，整行加起來不要太長）。
+只輸出 JSON，格式：{"tag":"...","title":"...","slogan":"...","tags3":["...","...","..."]}，不要任何其他文字。`;
+
+async function anthropicCopy(key, title, desc, mode) {
+  const user = `取向：${mode || "新品介紹"}\nShopline 品名：${title}\n商品描述：${(desc || "").slice(0, 500)}`;
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1024, system: BRAND_SYS, messages: [{ role: "user", content: user }] }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+  const txt = (j.content && j.content[0] && j.content[0].text) || "";
+  const m = txt.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error("AI 回傳格式異常");
+  const o = JSON.parse(m[0]);
+  let tag = o.tag || "";
+  if (tag && tag[0] !== "#") tag = "#" + tag;
+  return { tag, title: o.title || "", slogan: o.slogan || "", tags3: (o.tags3 || []).slice(0, 3) };
+}
 
 const SL = "https://open.shopline.io/v1";
 const ALLOW_ORIGINS = [
@@ -205,7 +246,7 @@ exports.shopline = onRequest(
     region: "asia-east1",
     memory: "512MiB",
     timeoutSeconds: 120,
-    secrets: [SHOPLINE_TOKEN, TOOL_PASSWORD],
+    secrets: [SHOPLINE_TOKEN, TOOL_PASSWORD, ANTHROPIC_KEY],
     cors: false,
   },
   async (req, res) => {
@@ -295,6 +336,20 @@ exports.shopline = onRequest(
         case "getProduct": {
           const r = await slFetch(token, `/products/${req.body.productId}?fields[]=description_translations&fields[]=title_translations&fields[]=status`);
           return res.json({ status: r.status, title: ((r.body.title_translations||{})["zh-hant"])||"", productStatus: r.body.status, description: ((r.body.description_translations||{})["zh-hant"])||"" });
+        }
+
+        case "genCopy": {
+          // 商品文案 AI 生成（P1 四段）；API Key 存後端 secret，同事不需輸入
+          const key = ANTHROPIC_KEY.value();
+          if (!key) return res.status(500).json({ error: "後端尚未設定 ANTHROPIC_KEY" });
+          const { title, desc, mode } = req.body;
+          if (!title) return res.status(400).json({ error: "缺少商品名稱" });
+          try {
+            const ref = await anthropicCopy(key, title, desc, mode);
+            return res.json({ ok: true, ref });
+          } catch (e) {
+            return res.status(502).json({ error: "AI 生成失敗：" + (e.message || "") });
+          }
         }
 
         case "setDescription": {
