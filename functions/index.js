@@ -5,7 +5,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { GoogleAuth } = require("google-auth-library");
-const { buildSeo } = require("./seo");
+const { buildSeo, RULE_VERSION } = require("./seo");
 
 admin.initializeApp();
 
@@ -132,6 +132,10 @@ exports.cleanupHourly = onSchedule(
   { schedule: "every 60 minutes", region: "asia-east1", timeZone: "Asia/Taipei", secrets: [SHOPLINE_TOKEN], timeoutSeconds: 540, memory: "512MiB" },
   async () => {
     const ran = await runDueCleanups(SHOPLINE_TOKEN.value(), admin.database());
+    try {
+      const seo = await seoRerunIfRuleChanged(SHOPLINE_TOKEN.value(), admin.database());
+      if (seo) console.log("SEO 規則更新，已重跑：" + seo);
+    } catch (e) { console.error("SEO 重跑失敗", e); }
     console.log("cleanup ran:", JSON.stringify(ran));
   }
 );
@@ -154,6 +158,38 @@ async function applySeo(token, db, p, by) {
   const r = await slFetch(token, `/products/${p.id}`, { method: "PUT", json });
   const ok = r.status === 200 || r.status === 201;
   return { id: p.id, ok, title: seo.title, description: seo.description, error: ok ? null : r.body };
+}
+async function seoPage(token, db, page, per, by) {
+  const qs = SEO_FIELDS.map((f) => "fields[]=items." + f).join("&");
+  const r = await slFetch(token, `/products/search?status=active&page=${page}&per_page=${per}&${qs}`);
+  if (r.status !== 200) throw new Error("讀取商品失敗 " + r.status);
+  const raw = r.body.items || [];
+  const items = raw.filter((p) => p.status !== "removed");
+  const results = [];
+  for (let i = 0; i < items.length; i += 5) {
+    const part = await Promise.all(items.slice(i, i + 5).map((p) => applySeo(token, db, p, by).catch((e) => ({ id: p.id, ok: false, error: String(e.message || e) }))));
+    part.forEach((x, k) => { x.name = ((items[i + k].title_translations || {})["zh-hant"]) || ""; });
+    results.push(...part);
+  }
+  // 只要求 items 欄位時 Shopline 不會回 pagination，所以用「這頁是否滿」判斷還有沒有下一頁
+  const pg = r.body.pagination || {};
+  const hasMore = pg.total_pages ? page < pg.total_pages : raw.length >= per;
+  return { hasMore, results };
+}
+// 規則版本變了 → 自動把全部上架商品重跑一次（由每小時排程呼叫）
+async function seoRerunIfRuleChanged(token, db) {
+  const st = (await db.ref("/seoRun").get()).val() || {};
+  if (st.version === RULE_VERSION) return null;
+  let page = 1, up = 0, same = 0, bad = 0;
+  const fails = [];
+  for (; page <= 60; page++) {
+    const r = await seoPage(token, db, page, 50, "自動排程");
+    r.results.forEach((x) => { if (x.same) same++; else if (x.ok) up++; else { bad++; fails.push(x.name); } });
+    if (!r.hasMore) break;
+  }
+  const summary = `更新 ${up}、不用改 ${same}、失敗 ${bad}`;
+  await db.ref("/seoRun").set({ at: Date.now(), by: "自動排程", version: RULE_VERSION, summary, fails: fails.slice(0, 50) });
+  return summary;
 }
 async function autoSeo(token, db, productId, by) {
   try {
@@ -502,24 +538,10 @@ exports.shopline = onRequest(
         }
 
         case "seoBatch": {
-          // 全站（上架中商品）一頁一頁跑：page 從 1 開始，回傳 totalPages 讓網頁接著叫下一頁
           const page = Math.max(1, Number(req.body.page) || 1);
           const per = Math.min(50, Math.max(5, Number(req.body.perPage) || 25));
-          const qs = SEO_FIELDS.map((f) => "fields[]=items." + f).join("&");
-          const r = await slFetch(token, `/products/search?status=active&page=${page}&per_page=${per}&${qs}`);
-          if (r.status !== 200) return res.status(502).json({ error: "讀取商品失敗", detail: r.body });
-          const raw = r.body.items || [];
-          const items = raw.filter((p) => p.status !== "removed");
-          const results = [];
-          for (let i = 0; i < items.length; i += 5) {
-            const part = await Promise.all(items.slice(i, i + 5).map((p) => applySeo(token, db, p, req.body.by).catch((e) => ({ id: p.id, ok: false, error: String(e.message || e) }))));
-            part.forEach((x, k) => { x.name = ((items[i + k].title_translations || {})["zh-hant"]) || ""; });
-            results.push(...part);
-          }
-          // 只要求 items 欄位時 Shopline 不會回 pagination，所以用「這頁是否滿」判斷還有沒有下一頁
-          const pg = r.body.pagination || {};
-          const hasMore = pg.total_pages ? page < pg.total_pages : raw.length >= per;
-          return res.json({ page, hasMore, totalPages: pg.total_pages || (hasMore ? page + 1 : page), total: pg.total_count || null, results });
+          const r = await seoPage(token, db, page, per, req.body.by);
+          return res.json({ page, hasMore: r.hasMore, totalPages: r.hasMore ? page + 1 : page, results: r.results });
         }
 
         case "seoRestore": {

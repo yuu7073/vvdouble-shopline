@@ -6,7 +6,10 @@
 
 const SUFFIX = "｜大尺碼女裝 VV DOUBLE";
 const MAX_DESC = 80;
-const BANNED = ["顯胖", "遮肉", "藏肉", "修飾缺點", "顯瘦", "遮小腹", "藏肚"];
+// 規則版本：改了規則就 +1，雲端排程會自動把上架商品重跑一次
+const RULE_VERSION = 2;
+// 身形焦慮相關字眼：重點句含任一個就整句略過（2026-10-29 Vivian：遮、肉、修飾、顯 都要拿掉）
+const BANNED = ["遮", "藏", "肉", "胖", "瘦", "顯", "修飾", "缺點", "掰掰袖", "蝴蝶袖", "副乳", "小腹", "肚", "腿粗", "手臂粗", "蘿蔔腿", "大腿", "比例", "身材", "不怕", "顯小", "臉小"];
 
 // 品類：依序比對品名，先中先用
 const CATS = [
@@ -18,7 +21,7 @@ const CATS = [
   ["風衣", "風衣"], ["大衣", "大衣"], ["罩衫", "罩衫"], ["背心外套", "背心外套"],
   ["牛仔褲", "牛仔褲"], ["寬褲", "寬褲"], ["褲裙", "褲裙"], ["長褲", "長褲"], ["短褲", "短褲"], ["褲", "褲子"],
   ["半身裙", "半身裙"], ["長裙", "長裙"], ["短裙", "短裙"], ["百褶裙", "百褶裙"], ["裙", "裙子"],
-  ["大學T", "大學T"], ["帽T", "帽T"], ["T恤", "T恤"], ["襯衫", "襯衫"], ["針織", "針織上衣"],
+  ["大學T", "大學T"], ["帽T", "帽T"], ["T-SHIRT", "T恤"], ["TSHIRT", "T恤"], ["T恤", "T恤"], ["襯衫", "襯衫"], ["針織", "針織上衣"],
   ["背心", "背心"], ["細肩帶", "細肩帶上衣"], ["上衣", "上衣"],
   ["鞋", "鞋款"], ["皮帶", "加長皮帶"],
 ];
@@ -138,4 +141,4 @@ function buildSeo(p) {
   return { title: seoTitle(p), description: seoDescription(p) };
 }
 
-module.exports = { buildSeo, seoTitle, seoDescription, baseTitle, bullets, sizesFromChart, SUFFIX };
+module.exports = { RULE_VERSION, buildSeo, seoTitle, seoDescription, baseTitle, bullets, sizesFromChart, SUFFIX };
