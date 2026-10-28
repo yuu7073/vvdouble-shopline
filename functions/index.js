@@ -418,26 +418,22 @@ exports.shopline = onRequest(
           if (!categoryId) return res.status(400).json({ error: "參數不足" });
           const out = [];
           for (let page = 1; page <= 40; page++) {
-            const r = await slFetch(token, `/products/search?category_id=${categoryId}&page=${page}&per_page=50&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.category_ids&fields[]=items.tags&fields[]=items.is_excluded_promotion&fields[]=items.sku`);
+            const r = await slFetch(token, `/products/search?category_id=${categoryId}&page=${page}&per_page=50&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.category_ids&fields[]=items.tags&fields[]=items.is_excluded_promotion&fields[]=items.sku&fields[]=items.variant_options&fields[]=items.seo_title_translations&fields[]=items.seo_description_translations&fields[]=items.seo_keywords`);
             const items = (r.body && r.body.items) || [];
-            items.forEach((it) => out.push({ id: it.id, title: (it.title_translations || {})["zh-hant"] || "", status: it.status, category_ids: it.category_ids || [], tags: it.tags || [], is_excluded_promotion: !!it.is_excluded_promotion, sku: it.sku || "" }));
+            items.forEach((it) => out.push({ id: it.id, title: (it.title_translations || {})["zh-hant"] || "", title_en: (it.title_translations || {}).en || "", status: it.status, category_ids: it.category_ids || [], tags: it.tags || [], is_excluded_promotion: !!it.is_excluded_promotion, sku: it.sku || "", colors: (it.variant_options || []).filter((v) => v.type === "color").map((v) => (v.name_translations || {})["zh-hant"] || ""), sizes: (it.variant_options || []).filter((v) => v.type === "size").map((v) => (v.name_translations || {})["zh-hant"] || ""), seo_title: (it.seo_title_translations || {})["zh-hant"] || "", seo_desc: (it.seo_description_translations || {})["zh-hant"] || "", seo_keywords: it.seo_keywords || "" }));
             if (items.length < 50) break;
           }
           return res.json({ items: out });
         }
 
-        case "productsByCategory": {
-          // 讀取某分類下全部商品（手動設定的活動要收尾時用）
-          const { categoryId } = req.body;
-          if (!categoryId) return res.status(400).json({ error: "參數不足" });
-          const out = [];
-          for (let page = 1; page <= 40; page++) {
-            const r = await slFetch(token, `/products/search?category_id=${categoryId}&page=${page}&per_page=50&fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.category_ids&fields[]=items.tags&fields[]=items.is_excluded_promotion&fields[]=items.sku`);
-            const items = (r.body && r.body.items) || [];
-            items.forEach((it) => out.push({ id: it.id, title: (it.title_translations || {})["zh-hant"] || "", status: it.status, category_ids: it.category_ids || [], tags: it.tags || [], is_excluded_promotion: !!it.is_excluded_promotion, sku: it.sku || "" }));
-            if (items.length < 50) break;
-          }
-          return res.json({ items: out });
+        case "seoUpdate": {
+          const { productId, seo } = req.body;
+          if (!productId || !seo) return res.status(400).json({ error: "參數不足" });
+          const body = {};
+          ["seo_title_translations", "seo_description_translations", "seo_keywords"].forEach((k) => { if (seo[k] !== undefined) body[k] = seo[k]; });
+          const r = await slFetch(token, `/products/${productId}`, { method: "PUT", json: body });
+          const ok = r.status === 200 || r.status === 201;
+          return res.json({ status: r.status, ok, error: ok ? null : r.body });
         }
 
         case "logOps": {
