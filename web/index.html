@@ -304,17 +304,6 @@
     <table id="tblNp"><thead><tr><th style="width:30px">#</th><th>商品名稱</th><th>規格 / SKU / 條碼</th><th style="width:90px">原價</th><th style="width:150px">不適用折扣／標籤</th><th>上架</th><th style="width:240px">分類</th><th style="width:170px">結果</th></tr></thead><tbody></tbody></table>
     <div id="logNp" style="font-family:Consolas,monospace;font-size:12px;background:#1f2937;color:#d1d5db;padding:12px;border-radius:8px;max-height:200px;overflow:auto;white-space:pre-wrap;margin-top:12px">尚未開始</div>
   </div>
-  <div class="card">
-    <div class="opts" style="margin-top:0"><b>SEO 補齊</b>
-      <select id="seoCat" style="min-width:220px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分類）</option></select>
-      <label><input type="checkbox" id="seoOverwrite"> 已有的也覆蓋</label>
-      <button class="btn ghost" id="btnSeoLoad">讀取商品</button>
-      <span class="sp"></span>
-      <button class="btn orange" id="btnSeoRun" disabled>寫入 SEO</button>
-    </div>
-    <div class="muted mini" id="seoMsg"></div>
-    <table id="tblSeo" class="hidden"><thead><tr><th style="width:30px">#</th><th>商品</th><th>SEO 標題</th><th>SEO 描述</th><th style="width:120px">結果</th></tr></thead><tbody></tbody></table>
-  </div>
 </section>
 <section id="panel-seo" class="hidden">
   <div class="card">
@@ -1248,7 +1237,6 @@ async function loadNpCats(){
     var DEF = /^(ALL|NEW)$/i;
     npBatchCats = npCats.filter(function(c){ return !c.parent && DEF.test(c.name.trim()); }).map(function(c){ return c.id; });
     renderNpBatch();
-    var sc = $('#seoCat'); sc.innerHTML = '<option value="">（選分類）</option>' + npCatOptions([]);
     $('#npCatMsg').textContent = '這批共用分類';
   }catch(e){ $('#npCatMsg').textContent = '✖ ' + e.message; }
 }
@@ -1319,8 +1307,8 @@ $('#btnLoadNp').addEventListener('click', async function(){
       var iPc = findCol(['貨號','款號','組頭']), iPp = findCol(['零售價','售價','原價']);
       if (iPc < 0 || iPp < 0) logN('排程表找不到欄位：' + (iPc<0?'貨號 ':'') + (iPp<0?'零售價':'') + '（表頭：' + ph.join('、') + '）');
       var iEn = -1; for (var q=0;q<ph.length;q++){ if (/英文/.test(ph[q]||'')) { iEn = q; break; } } if (iEn < 0) iEn = 16; // Q 欄
-      var iBig = findCol(['產品大類','大類']), iMid = findCol(['產品中類','中類']), iCost = findCol(['批價','成本']), iCombo = findCol(['組合價','套裝價']), iOrd = findCol(['呈現順序','順序']), iComp = findCol(['成分','材質']);
-      if (iPc>=0) pr.slice(1).forEach(function(r){ var code = String(r[iPc]||'').trim().split(/[-\s]/)[0]; if (!code) return; var v = iPp>=0 ? parseFloat(String(r[iPp]||'').replace(/[^\d.]/g,'')) : 0; var en = String(r[iEn]||'').trim(); priceMap[code] = { price: v || '', en: en, big: iBig>=0 ? String(r[iBig]||'').trim() : '', mid: iMid>=0 ? String(r[iMid]||'').trim() : '', cost: iCost>=0 ? (parseFloat(String(r[iCost]||'').replace(/[^\d.]/g,'')) || 0) : 0, combo: iCombo>=0 ? String(r[iCombo]||'').trim().split('\n')[0].trim() : '', ord: iOrd>=0 ? (parseFloat(r[iOrd]) || 0) : 0, comp: iComp>=0 ? String(r[iComp]||'').replace(/\s+/g,' ').trim() : '' }; });
+      var iBig = findCol(['產品大類','大類']), iMid = findCol(['產品中類','中類']), iCost = findCol(['批價','成本']), iCombo = findCol(['組合價','套裝價']), iOrd = findCol(['呈現順序','順序']);
+      if (iPc>=0) pr.slice(1).forEach(function(r){ var code = String(r[iPc]||'').trim().split(/[-\s]/)[0]; if (!code) return; var v = iPp>=0 ? parseFloat(String(r[iPp]||'').replace(/[^\d.]/g,'')) : 0; var en = String(r[iEn]||'').trim(); priceMap[code] = { price: v || '', en: en, big: iBig>=0 ? String(r[iBig]||'').trim() : '', mid: iMid>=0 ? String(r[iMid]||'').trim() : '', cost: iCost>=0 ? (parseFloat(String(r[iCost]||'').replace(/[^\d.]/g,'')) || 0) : 0, combo: iCombo>=0 ? String(r[iCombo]||'').trim().split('\n')[0].trim() : '', ord: iOrd>=0 ? (parseFloat(r[iOrd]) || 0) : 0 }; });
     } catch(e){ logN('排程表讀取失敗：' + e.message); }
   }
   // 依 組頭名稱+顏色 分組
@@ -1333,7 +1321,7 @@ $('#btnLoadNp').addEventListener('click', async function(){
     groups[key].sizes.push({ size: size || 'F', sku: sku, barcode: bar });
   });
   var colorCount = {}; order.forEach(function(k){ var g = groups[k]; colorCount[g.name] = (colorCount[g.name]||0) + 1; });
-  npRows = order.map(function(k){ var g = groups[k]; g.multi = colorCount[g.name] > 1; g.title = g.multi && g.color ? g.name + '-' + g.color : g.name; var inf = priceMap[g.base] || {}; g.price = inf.price || ''; g.en = inf.en || ''; g.big = inf.big || ''; g.mid = inf.mid || ''; g.cost = inf.cost || 0; g.combo = inf.combo || ''; g.excl = !!g.combo; g.tag = g.combo; g.ord = inf.ord || 0; g.comp = inf.comp || ''; var mc = npMatchCats(g.big, g.mid); g.extraCats = mc.ids; g.catMiss = mc.miss; var cc = (g.sizes[0].sku.split('-')[1] || ''); g.link = g.base + (cc ? '-' + cc : ''); return g; });
+  npRows = order.map(function(k){ var g = groups[k]; g.multi = colorCount[g.name] > 1; g.title = g.multi && g.color ? g.name + '-' + g.color : g.name; var inf = priceMap[g.base] || {}; g.price = inf.price || ''; g.en = inf.en || ''; g.big = inf.big || ''; g.mid = inf.mid || ''; g.cost = inf.cost || 0; g.combo = inf.combo || ''; g.excl = !!g.combo; g.tag = g.combo; g.ord = inf.ord || 0; var mc = npMatchCats(g.big, g.mid); g.extraCats = mc.ids; g.catMiss = mc.miss; var cc = (g.sizes[0].sku.split('-')[1] || ''); g.link = g.base + (cc ? '-' + cc : ''); return g; });
   npRows.sort(function(a,b){ return (b.ord||0) - (a.ord||0); });
   // 檢查後台是否已存在
   $('#npMsg').textContent = '對照後台是否已有同名商品…';
@@ -1367,23 +1355,7 @@ function renderNp(){
 }
 ['#npPubDay','#npPubTime','#npSaleDay','#npSaleTime'].forEach(function(s){ $(s).addEventListener('change', function(){ if (npRows.length) renderNp(); }); });
 function slug(s){ return String(s).toLowerCase().replace(/[^a-z0-9一-鿿]+/g,'_'); }
-// SEO 文案規則（建檔與補齊共用）
-function cleanName(n){ return String(n||'').replace(/《[^》]*》/g,'').replace(/-[^-]+$/, function(m){ return /色|藍|黑|白|灰|杏|卡其|咖|綠|粉|紫|紅|黃|銀|金|米/.test(m) ? '' : m; }).trim(); }
-function buildSeo(o){ // {name, en, mid, big, colors[], sizes[], comp}
-  var base = cleanName(o.name); var mid = o.mid || o.big || '';
-  var title = '中大尺碼' + mid + '｜' + base + '｜VV DOUBLE';
-  var parts = [];
-  if ((o.colors||[]).length) parts.push((o.colors||[]).join('／'));
-  if ((o.sizes||[]).length) parts.push('尺寸 ' + (o.sizes||[]).join('／'));
-  if (o.comp) parts.push(o.comp);
-  var desc = 'VV DOUBLE 中大尺碼女裝｜' + base + (parts.length ? '，' + parts.join('，') : '') + '。獨家自訂版型，全台門市可試穿。';
-  var kw = ['中大尺碼' + mid, '大尺碼' + mid, '中大尺碼女裝', '大尺碼女裝', o.big ? '大尺碼' + o.big : ''].filter(Boolean).filter(function(x,i,a){ return a.indexOf(x)===i; }).join(', ');
-  var out = { seo_title_translations: { 'zh-hant': title }, seo_description_translations: { 'zh-hant': desc }, seo_keywords: kw };
-  if (o.en) { out.seo_title_translations.en = 'Plus Size ' + o.en + ' | VV DOUBLE'; out.seo_description_translations.en = 'VV DOUBLE plus size women\'s wear. ' + o.en + ((o.sizes||[]).length ? ', sizes ' + o.sizes.join('/') : '') + '.'; }
-  return out;
-}
 function buildProduct(g){
-  var seo = buildSeo({ name: g.name, en: g.en, mid: g.mid, big: g.big, colors: g.color ? [g.color] : [], sizes: g.sizes.map(function(x){ return x.size; }), comp: g.comp });
   var cats = npSelectedCats().slice(); npExpand(g.extraCats || []).forEach(function(id){ if (cats.indexOf(id) < 0) cats.push(id); });
   var pubDay = +$('#npPubDay').value, pubT = $('#npPubTime').value, saleDay = +$('#npSaleDay').value, saleT = $('#npSaleTime').value;
   var color = g.color || '';
@@ -1393,7 +1365,7 @@ function buildProduct(g){
   var vars = g.sizes.map(function(s){ var key = []; if (color) key.push('c_' + slug(color)); if (useSize) key.push('s_' + slug(s.size)); var v = { key: key, sku: s.sku, quantity: 0 }; if (s.barcode) { v.barcode = s.barcode; v.gtin = s.barcode; } return v; });
   var p = {
     title_translations: g.en ? { 'zh-hant': g.title, en: g.en } : { 'zh-hant': g.title },
-    seo_title_translations: seo.seo_title_translations, seo_description_translations: seo.seo_description_translations, seo_keywords: seo.seo_keywords,
+    seo_title_translations: g.en ? { 'zh-hant': g.name, en: g.en } : { 'zh-hant': g.name },
     link: g.link,
     status: 'hidden', price: g.price, same_price: true, cost: g.cost || 0, weight: 0,
     category_ids: cats, is_preorder: false, is_reminder_active: false, unlimited_quantity: false,
@@ -1434,49 +1406,6 @@ $('#btnExclNp').addEventListener('click', function(){
   if (!ids.length) return;
   var code = exclScript(ids, true);
   try{ navigator.clipboard.writeText(code).then(function(){ logN('腳本已複製（' + ids.length + ' 款），到 Shopline 後台 F12 → Console 貼上執行'); }, function(){ logN(code); }); }catch(e){ logN(code); }
-});
-// ===== SEO 補齊 =====
-var seoRows = [];
-$('#btnSeoLoad').addEventListener('click', async function(){
-  var catId = $('#seoCat').value; if(!catId){ $('#seoMsg').textContent = '請先載入分類並選分類'; return; }
-  $('#seoMsg').textContent = '讀取中…'; $('#btnSeoRun').disabled = true;
-  try{
-    var j = await api('productsByCategory', { categoryId: catId }); var items = j.items || [];
-    var byId = {}; npCats.forEach(function(c){ byId[c.id] = c; });
-    var over = $('#seoOverwrite').checked;
-    seoRows = items.map(function(p){
-      // 中類＝商品所屬的子分類（排除 VIEW ALL），大類＝其父分類
-      var subs = (p.category_ids||[]).map(function(id){ return byId[id]; }).filter(function(c){ return c && c.parent && !/^VIEW\s*ALL/i.test(c.name) && /^\+/.test((byId[c.parent]||{}).name||''); });
-      var mid = subs.length ? subs[0].name.replace(/\/.*$/,'') : ''; var big = subs.length ? (byId[subs[0].parent].name||'').replace(/^\+/,'').replace(/類$/,'') : '';
-      var colors = (p.colors||[]).length ? p.colors : (function(){ var m = /-([^-]+)$/.exec(p.title); return m ? [m[1]] : []; })();
-      var seo = buildSeo({ name: p.title, en: p.title_en, mid: mid, big: big, colors: colors, sizes: p.sizes || [], comp: '' });
-      var skip = !over && /中大尺碼/.test(p.seo_title || '');
-      return { p: p, seo: seo, skip: skip, result: skip ? '－ 已有' : '' };
-    });
-    renderSeo(); $('#seoMsg').textContent = items.length + ' 款，' + seoRows.filter(function(r){ return !r.skip; }).length + ' 款要寫入';
-    $('#btnSeoRun').disabled = !seoRows.some(function(r){ return !r.skip; });
-  }catch(e){ $('#seoMsg').textContent = '✖ ' + e.message; }
-});
-function renderSeo(){
-  var tb = $('#tblSeo tbody'); tb.innerHTML = ''; $('#tblSeo').classList.remove('hidden');
-  seoRows.forEach(function(r, i){
-    var tr = document.createElement('tr');
-    tr.innerHTML = '<td>' + (i+1) + '</td><td>' + r.p.title + '<div class="muted">' + (r.p.sku||'') + '</div></td><td>' + r.seo.seo_title_translations['zh-hant'] + '</td><td class="muted">' + r.seo.seo_description_translations['zh-hant'] + '<br>' + r.seo.seo_keywords + '</td><td>' + r.result + '</td>';
-    if (/^✔/.test(r.result)) tr.classList.add('done'); if (/^✖/.test(r.result)) tr.classList.add('bad');
-    tb.appendChild(tr);
-  });
-}
-$('#btnSeoRun').addEventListener('click', async function(){
-  var todo = seoRows.filter(function(r){ return !r.skip; });
-  if(!confirm('將寫入 ' + todo.length + ' 款的 SEO 標題／描述／關鍵字（不動商品名稱與其他設定）。確定？')) return;
-  this.disabled = true;
-  for (var i=0;i<todo.length;i++){
-    var r = todo[i];
-    try { var j = await api('seoUpdate', { productId: r.p.id, seo: r.seo }); r.result = j.ok ? '✔ 完成' : '✖ ' + JSON.stringify(j.error).slice(0,80); }
-    catch(e){ r.result = '✖ ' + e.message; }
-    renderSeo(); $('#seoMsg').textContent = '寫入中 ' + (i+1) + '/' + todo.length;
-  }
-  $('#seoMsg').textContent = '完成：' + todo.filter(function(r){ return /^✔/.test(r.result); }).length + ' 款成功';
 });
 // ===== 建立資料夾 =====
 function sheetId3(){ var m=/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec($('#sheetUrl3').value); return m?m[1]:''; }
