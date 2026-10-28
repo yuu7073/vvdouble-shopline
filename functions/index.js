@@ -508,15 +508,18 @@ exports.shopline = onRequest(
           const qs = SEO_FIELDS.map((f) => "fields[]=items." + f).join("&");
           const r = await slFetch(token, `/products/search?status=active&page=${page}&per_page=${per}&${qs}`);
           if (r.status !== 200) return res.status(502).json({ error: "讀取商品失敗", detail: r.body });
-          const items = (r.body.items || []).filter((p) => p.status !== "removed");
+          const raw = r.body.items || [];
+          const items = raw.filter((p) => p.status !== "removed");
           const results = [];
           for (let i = 0; i < items.length; i += 5) {
             const part = await Promise.all(items.slice(i, i + 5).map((p) => applySeo(token, db, p, req.body.by).catch((e) => ({ id: p.id, ok: false, error: String(e.message || e) }))));
             part.forEach((x, k) => { x.name = ((items[i + k].title_translations || {})["zh-hant"]) || ""; });
             results.push(...part);
           }
+          // 只要求 items 欄位時 Shopline 不會回 pagination，所以用「這頁是否滿」判斷還有沒有下一頁
           const pg = r.body.pagination || {};
-          return res.json({ page, totalPages: pg.total_pages || page, total: pg.total_count || null, results });
+          const hasMore = pg.total_pages ? page < pg.total_pages : raw.length >= per;
+          return res.json({ page, hasMore, totalPages: pg.total_pages || (hasMore ? page + 1 : page), total: pg.total_count || null, results });
         }
 
         case "seoRestore": {

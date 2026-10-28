@@ -1496,14 +1496,14 @@ $('#btnSeoAll').addEventListener('click', async function(){
         catch(e){ logS('第 ' + page + ' 頁失敗，重試：' + e.message); await new Promise(function(ok){ setTimeout(ok, 3000); }); }
       }
       if (!r) throw new Error('第 ' + page + ' 頁連續失敗，已停止');
-      total = r.totalPages || page;
+      total = r.hasMore ? Math.max(page + 1, r.totalPages || 0) : page;
       r.results.forEach(function(x){
         if (x.same) same++;
         else if (x.ok) up++;
         else { bad++; fails.push(x); logS('✖ ' + x.name + '：' + (typeof x.error === 'string' ? x.error : JSON.stringify(x.error||x.skipped)).slice(0,160)); }
       });
-      $('#barSeo').style.width = Math.round(page/total*100) + '%';
-      $('#seoCount').textContent = '第 ' + page + '／' + total + ' 頁　已更新 ' + up + '　不用改 ' + same + '　失敗 ' + bad;
+      $('#barSeo').style.width = (r.hasMore ? Math.min(95, Math.round((up+same+bad)/430*100)) : 100) + '%';
+      $('#seoCount').textContent = '已處理 ' + (up+same+bad) + ' 款　更新 ' + up + '　不用改 ' + same + '　失敗 ' + bad + (r.hasMore ? '　…' : '');
       page++;
     }
     var sum = '更新 ' + up + '、不用改 ' + same + '、失敗 ' + bad;
