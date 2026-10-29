@@ -915,7 +915,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-25b" });
+        if (op === "version") return res.json({ reels: "2026-10-29a" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -1219,6 +1219,22 @@ exports.reels = onRequest(
             } catch (e) { out.push({ id: pid, ok: false, error: String(e.message || e) }); }
           }
           return res.json({ results: out, failed: out.filter((x) => !x.ok).length });
+        }
+
+        case "ytStatus": {
+          // 改影片公開狀態：public／private／unlisted；private + publishAt＝定時公開（YouTube 自己到時間切公開）
+          const { videoId, privacy, publishAt } = req.body;
+          if (!videoId) return res.status(400).json({ error: "缺少 videoId" });
+          const t = await ytAccessToken(db);
+          const status = { privacyStatus: publishAt ? "private" : (privacy || "public"), selfDeclaredMadeForKids: false };
+          if (publishAt) status.publishAt = new Date(publishAt).toISOString();
+          const r = await fetch("https://www.googleapis.com/youtube/v3/videos?part=status", {
+            method: "PUT", headers: { Authorization: `Bearer ${t.access_token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ id: videoId, status }),
+          });
+          const body = await r.text();
+          if (!r.ok) return res.json({ ok: false, status: r.status, error: body.slice(0, 300) });
+          return res.json({ ok: true, status: JSON.parse(body).status });
         }
 
         case "ytDelete": {
