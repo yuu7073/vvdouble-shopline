@@ -2,8 +2,27 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "cleanupJobs": { ".indexOn": ["status", "createdAt"] },
-    "reels_errors": { ".indexOn": ["ts"] },
-    "reels_events": { ".indexOn": ["ts"] }
+    "cleanupJobs": {
+      ".indexOn": [
+        "status",
+        "createdAt"
+      ]
+    },
+    "reels_errors": {
+      ".indexOn": [
+        "ts"
+      ]
+    },
+    "reels_events": {
+      ".indexOn": [
+        "ts"
+      ]
+    },
+    "igwall": {
+      "public": {
+        ".read": true,
+        ".write": false
+      }
+    }
   }
 }

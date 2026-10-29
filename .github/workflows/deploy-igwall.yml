@@ -1,0 +1,43 @@
+name: Deploy igwall (vvdouble-igwall repo)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 * * * *"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout vvdouble-igwall
+        uses: actions/checkout@v4
+        with:
+          repository: yuu7073/vvdouble-igwall
+          ref: main
+      - name: Skip if function source unchanged
+        id: chk
+        run: |
+          SHA=$(git rev-parse HEAD)
+          CUR=$(curl -s -X POST -H "Content-Type: application/json" -d '{"action":"version"}' "https://asia-east1-vvdouble-shopline.cloudfunctions.net/igwall" || true)
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "live=$CUR"
+          if [ "${{ github.event_name }}" = "schedule" ] && echo "$CUR" | grep -q "\"sha\":\"$SHA\""; then echo "skip=true" >> $GITHUB_OUTPUT; else echo "skip=false" >> $GITHUB_OUTPUT; fi
+      - uses: actions/setup-node@v4
+        if: steps.chk.outputs.skip == 'false'
+        with:
+          node-version: 22
+      - name: Stamp commit sha into function
+        if: steps.chk.outputs.skip == 'false'
+        run: sed -i "s/__GIT_SHA__/${{ steps.chk.outputs.sha }}/" functions/index.js
+      - name: Install function deps
+        if: steps.chk.outputs.skip == 'false'
+        run: cd functions && npm install --no-audit --no-fund
+      - name: Deploy function (codebase igwall only)
+        if: steps.chk.outputs.skip == 'false'
+        run: npx --yes firebase-tools@13 deploy --only functions:igwall,functions:igwallSync --project vvdouble-shopline --non-interactive --force
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GOOGLE_CLOUD_QUOTA_PROJECT: vvdouble-shopline
+      - name: Verify
+        if: steps.chk.outputs.skip == 'false'
+        run: |
+          sleep 10
+          curl -s -X POST -H "Content-Type: application/json" -d '{"action":"version"}' "https://asia-east1-vvdouble-shopline.cloudfunctions.net/igwall"
