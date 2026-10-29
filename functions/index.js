@@ -167,6 +167,30 @@ async function runCleanupJob(token, db, jobId, job) {
       }
     } catch (e) { note(p.id, "✖" + String(e.message).slice(0, 80)); }
   }
+  // 3b) 庫存：Primary 倉數量 > 0 的商品上架
+  if (revert.restock) {
+    try {
+      const wr = await slFetch(token, `/warehouses?per_page=50`);
+      const whs = (wr.body && wr.body.items) || [];
+      const primary = whs.find((w) => /primary|預設/i.test(w.name || "")) || whs[0];
+      if (!primary) throw new Error("找不到 Primary 倉庫");
+      const toActive = [];
+      for (const p of products) {
+        const sr = await slFetch(token, `/products/${p.id}/stocks`);
+        const b = sr.body || {};
+        let qty = 0;
+        const sum = (arr) => (arr || []).filter((x) => x.warehouse_id === primary.id).reduce((a, x) => a + (Number(x.quantity) || 0), 0);
+        if (Array.isArray(b.variations) && b.variations.length) b.variations.forEach((v) => { qty += sum(v.stocks); });
+        else qty = sum(b.stocks);
+        if (qty > 0) toActive.push(p.id); else note(p.id, "庫存0不上架");
+      }
+      for (let i = 0; i < toActive.length; i += 100) {
+        const grp = toActive.slice(i, i + 100);
+        const r = await slFetch(token, `/products/status/bulk`, { method: "PUT", json: { products: grp.map((id) => ({ id, status: "active" })) } });
+        grp.forEach((id) => note(id, (r.status === 200 || r.status === 201) ? "✔上架" : "✖上架"));
+      }
+    } catch (e) { results["_restock"] = "✖ 庫存判斷失敗 " + String(e.message).slice(0, 80); }
+  }
   // 4) 測試用：刪掉這次建立的限時促銷價活動
   if (revert.flash && (job.flashIds || []).length) {
     for (const fid of job.flashIds) {

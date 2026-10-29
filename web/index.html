@@ -204,6 +204,7 @@
       <label><input type="checkbox" id="cuCat" checked> 移除活動分類</label>
       <label><input type="checkbox" id="cuTag" checked> 移除活動標籤</label>
       <label><input type="checkbox" id="cuExcl" checked> 列出需手動關閉「不適用折扣」的商品</label>
+      <label><input type="checkbox" id="cuRestock"> Primary 庫存 &gt;0 的上架</label>
       <label class="test"><input type="checkbox" id="cuSched"> 上架時間恢復原狀（測試用）</label>
       <label class="test"><input type="checkbox" id="cuStatus"> 上架狀態恢復原狀（測試用）</label>
       <label class="test"><input type="checkbox" id="cuFlash"> 刪除這次建立的促銷活動（測試用）</label>
@@ -233,6 +234,7 @@
       <select id="exCat" style="min-width:220px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分類）</option></select>
       <input id="exTags" type="text" placeholder="標籤，逗號分隔" style="padding:8px;border:1px solid var(--line);border-radius:8px;width:180px">
       <input id="exEnd" type="datetime-local" style="padding:7px;border:1px solid var(--line);border-radius:8px">
+      <label><input type="checkbox" id="exRestock"> Primary 庫存 &gt;0 的上架</label>
       <button class="btn ghost" id="btnExLoad">讀取商品</button>
       <button class="btn orange" id="btnExSchedule" disabled>建立收尾任務</button>
     </div>
@@ -1117,8 +1119,8 @@ $('#btnRunCamp').addEventListener('click', async function(){
     }
   }
   // 收尾任務
-  var cu = { category: $('#cuCat').checked && st.cat, tags: $('#cuTag').checked && st.tag, excluded: $('#cuExcl').checked && st.excl, schedule: $('#cuSched').checked, status: $('#cuStatus').checked, flash: $('#cuFlash').checked };
-  if (end && (cu.category || cu.tags || cu.excluded || cu.schedule || cu.status || cu.flash)) {
+  var cu = { category: $('#cuCat').checked && st.cat, tags: $('#cuTag').checked && st.tag, excluded: $('#cuExcl').checked && st.excl, restock: $('#cuRestock').checked, schedule: $('#cuSched').checked, status: $('#cuStatus').checked, flash: $('#cuFlash').checked };
+  if (end && (cu.category || cu.tags || cu.excluded || cu.restock || cu.schedule || cu.status || cu.flash)) {
     try{
       var job = await api('scheduleCleanup', { title: title || $('#sheetTab2').value, endAt: new Date(end).getTime(), revert: cu, categoryId: catId || null, tags: tags, flashIds: createdFlash, by: who,
         products: all.map(function(x){ return { id: x.p.id, title: x.p.title, before: { category_ids: x.p.category_ids, tags: x.p.tags, is_excluded_promotion: x.p.is_excluded_promotion, schedule_publish_at: x.p.schedule_publish_at, status: x.p.status } }; }) });
@@ -1170,10 +1172,10 @@ $('#btnExSchedule').addEventListener('click', async function(){
   var catId = $('#exCat').value, catName = $('#exCat').selectedOptions[0].textContent, end = $('#exEnd').value;
   if(!end){ alert('請填結束時間'); return; }
   var tags = $('#exTags').value.split(/[,，]/).map(function(t){return t.trim();}).filter(Boolean);
-  if(!confirm('將在 ' + end.replace('T',' ') + ' 後收尾「' + catName + '」共 ' + exItems.length + ' 款：移除分類' + (tags.length ? '、移除標籤 ' + tags.join('/') : '') + '，並列出需關閉不適用折扣的商品（組合價／套裝價除外）。確定？')) return;
+  if(!confirm('將在 ' + end.replace('T',' ') + ' 後收尾「' + catName + '」共 ' + exItems.length + ' 款：移除分類' + (tags.length ? '、移除標籤 ' + tags.join('/') : '') + '，並列出需關閉不適用折扣的商品（組合價／套裝價除外）' + ($('#exRestock').checked ? '，Primary 庫存>0 的上架' : '') + '。確定？')) return;
   this.disabled = true;
   try{
-    var job = await api('scheduleCleanup', { title: catName, endAt: new Date(end).getTime(), revert: { category: true, tags: !!tags.length, excluded: true }, categoryId: catId, tags: tags, flashIds: [], by: who,
+    var job = await api('scheduleCleanup', { title: catName, endAt: new Date(end).getTime(), revert: { category: true, tags: !!tags.length, excluded: true, restock: $('#exRestock').checked }, categoryId: catId, tags: tags, flashIds: [], by: who,
       products: exItems.map(function(p){ var combo = (p.tags||[]).some(function(t){ return COMBO_RE.test(t); }); return { id: p.id, title: p.title, before: { category_ids: p.category_ids.filter(function(c){ return c !== catId; }), tags: (p.tags||[]).filter(function(t){ return tags.indexOf(t) < 0; }), is_excluded_promotion: combo ? true : false, status: p.status } }; }) });
     $('#exMsg').textContent = '✔ 已建立收尾任務'; loadJobs();
   }catch(e){ $('#exMsg').textContent = '✖ ' + e.message; this.disabled = false; }
