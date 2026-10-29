@@ -1088,11 +1088,21 @@ $('#btnRunCamp').addEventListener('click', async function(){
     var existing = []; try{ existing = (await api('flashCampaigns', {})).items; }catch(e){}
     var maxN = 0, sameTitle = []; existing.forEach(function(c){ var m = new RegExp('^' + title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '(-(\\d+))?$').exec(c.title||''); if(m){ sameTitle.push(c); if(m[2]) maxN = Math.max(maxN, +m[2]); } });
     // 已在同名活動裡的商品跳過
-    var already = {};
+    var already = {}, conflict = {};
     for (var si=0; si<sameTitle.length; si++){ try{ var fc = await api('getFlashCampaign', {id: sameTitle[si].id}); (fc.product_ids||[]).forEach(function(id){ already[id] = sameTitle[si].title; }); fc.price_sets.forEach(function(ps){ if(ps.product_id) already[ps.product_id] = sameTitle[si].title; }); }catch(e){} }
+    // 其他「進行中／即將開始」且時間重疊的促銷活動：同一商品不能重複在裡面，先找出來
+    var sIso = new Date(start).getTime(), eIso = new Date(end).getTime();
+    var others = existing.filter(function(c){ if(sameTitle.indexOf(c) >= 0) return false; var cs = new Date((c.start_at||'').replace(' ','T') + (/(Z|[+-]\d\d:?\d\d)$/.test(c.start_at||'') ? '' : 'Z')).getTime(), ce = new Date((c.end_at||'').replace(' ','T') + (/(Z|[+-]\d\d:?\d\d)$/.test(c.end_at||'') ? '' : 'Z')).getTime(); return !(isNaN(cs)||isNaN(ce)) && ce > Date.now() && cs < eIso && ce > sIso; });
+    var wantIds = {}; flashItems.forEach(function(x){ wantIds[x.p.id] = true; });
+    for (var oi=0; oi<others.length; oi++){ try{ var oc = await api('getFlashCampaign', {id: others[oi].id}); var ids = (oc.product_ids||[]).concat((oc.price_sets||[]).map(function(ps){ return ps.product_id; })); ids.forEach(function(id){ if(id && wantIds[id] && !already[id]) conflict[id] = others[oi].title; }); }catch(e){} }
     var skippedFlash = flashItems.filter(function(x){ return already[x.p.id]; });
-    flashItems = flashItems.filter(function(x){ return !already[x.p.id]; });
+    var conflicted = flashItems.filter(function(x){ return conflict[x.p.id]; });
+    flashItems = flashItems.filter(function(x){ return !already[x.p.id] && !conflict[x.p.id]; });
     if(skippedFlash.length){ logC('－ ' + skippedFlash.length + ' 個商品已在後台同名促銷活動中，跳過不重建'); skippedFlash.forEach(function(x){ x.row.result += '－ 已在' + already[x.p.id] + ' '; }); }
+    if(conflicted.length){
+      logC('✖ ' + conflicted.length + ' 個商品已在其他時間重疊的促銷活動裡，這次不放進去（表格標紅）：');
+      conflicted.forEach(function(x){ logC('　' + (x.row.code||'') + ' ' + x.p.title + ' → 在「' + conflict[x.p.id] + '」'); x.row.result += '✖ 已在「' + conflict[x.p.id] + '」 '; });
+    }
     var groups = chunk(flashItems, 100);
     for(var g=0; g<groups.length; g++){
       var n = maxN + g + 1, name = title + '-' + n;
@@ -1103,7 +1113,7 @@ $('#btnRunCamp').addEventListener('click', async function(){
       });
       try{
         var c = await api('createFlashCampaign', {title:name, start_at: toUTC(start), end_at: toUTC(end), price_sets: sets, uploader: who});
-        if(!c.ok) throw new Error(JSON.stringify(c.error).slice(0,200));
+        if(!c.ok){ var em = JSON.stringify(c.error||''); throw new Error(/other upcoming or ongoing flash/i.test(em) ? '有商品已在其他時間重疊的促銷活動中（請看上方清單；若上方沒列出，代表那個活動不在最近 250 筆內，請到後台「商品限時促銷價」查）' : em.slice(0,200)); }
         logC('✔ 建立限時促銷價「' + name + '」：' + c.count + ' 品'); createdFlash.push(c.id);
         // 回讀比對
         try{
