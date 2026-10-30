@@ -826,9 +826,9 @@ function stripEmbed(html) {
 }
 
 const FALLBACK_TITLES = [
-  (p) => `${p.category || "這件"}這樣穿，不同身形都好看｜VV Double`,
-  (p) => `同一件，大尺碼和中尺碼各自的穿法｜VV Double`,
-  (p) => `穿上就知道的舒服，看看實穿怎麼動｜VV Double`,
+  (p) => `${p.category || "這件"}這樣穿，不同身形都好看｜VV DOUBLE 台灣中大尺碼女裝品牌`,
+  (p) => `同一件，大尺碼和中尺碼各自的穿法｜VV DOUBLE 台灣中大尺碼女裝品牌`,
+  (p) => `穿上就知道的舒服，看看實穿怎麼動｜VV DOUBLE 台灣中大尺碼女裝品牌`,
 ];
 
 async function productDescription(token, name) {
@@ -866,6 +866,7 @@ async function aiTitle(db, p, token) {
     (p.colors || []).length ? `顏色：${p.colors.join("、")}` : "",
 
     p.extra ? `補充：${p.extra}` : "",
+    (p.avoid || []).length ? `這些已經用過，請寫完全不同角度、不同開頭的句子：\n${p.avoid.map((x) => "・" + x).join("\n")}` : "",
     desc ? `官網商品描述（唯一可用的事實來源）：\n${desc}` : "",
   ].filter(Boolean).join("\n");
   if (key) {
@@ -890,7 +891,8 @@ async function aiTitle(db, p, token) {
         .filter(Boolean);
       const clean = lines.filter((x) => !/[配搭]/.test(x));      // 寫了「配／搭」什麼的那句不要（影片裡怎麼搭不知道）
       if (clean.length) lines.splice(0, lines.length, ...clean);
-      if (lines.length) return lines.map((l) => (l.endsWith("｜VV Double") ? l : l.replace(/[｜|].*$/, "").trim() + "｜VV Double"));
+      const SUF = "｜VV DOUBLE 台灣中大尺碼女裝品牌";
+      if (lines.length) return lines.map((l) => (l.endsWith(SUF) ? l : l.replace(/[｜|].*$/, "").trim() + SUF));
     } catch (e) { AI_LAST_ERROR = String(e); console.error("aiTitle", e); }
   } else AI_LAST_ERROR = "沒有設定 Anthropic 金鑰";
   return FALLBACK_TITLES.map((f) => f(p));
@@ -944,7 +946,7 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-29a" });
+        if (op === "version") return res.json({ reels: "2026-10-30a" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
