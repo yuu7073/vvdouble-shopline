@@ -14,40 +14,67 @@ const TOOL_PASSWORD = defineSecret("TOOL_PASSWORD");
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
 
 // 美編整合工具 · 商品文案 AI 生成（P1 四段）品牌鐵律 prompt
-const BRAND_SYS = `你是 VV DOUBLE（台灣大尺碼女裝品牌）的資深美編文案。根據商品資料，生成「P1 做圖參考」的四段文字。
-品牌文案鐵律（務必全部遵守）：
-1. 絕不販賣身形焦慮，不先戳痛點再給解法。
-2. 禁用字：顯胖、遮肉、藏肉、修飾缺點。
-3. 「顯瘦」不可當賣點。
-4. 正向框架：舒適、合身、自在；衣服配合人，不是人配合衣服。
-5. 不提競品、不做比較或對比抬高品牌（不要「不是放大版」這類）。
-6. 永久禁用破折號「——」。
-7. 語氣口語、溫暖、親切、生動輕快活潑，不要 AI 感、不要落落長。
-8. 不做負面行銷、不做飢餓行銷（不寫「最後N件」「再不買就沒了」）。
-9. 不帶入價格。
-10. 商品大標 title：把 Shopline 品名的《獨家自訂》等前綴、顏色、「顯瘦」去掉並重寫乾淨；大標不得出現「顯瘦」「修飾」。
-11. 賣點 slogan 與三標籤 tags3：可用「修飾身型」「修身」「順身」等（這是允許的）。
-目標客群稱呼：棉花糖女孩、肉肉女孩。
-四段定義：
-- tag：情境標籤，# 開頭短句（如 #不修邊幅、#剛剛好的浪漫），# 之後 4～6 字。
-- title：商品大標，重寫乾淨，拆成兩行、語意自然斷句，每行 4～6 字（例：["胸口綁帶坎肩","針織外套"]）。
-- slogan：一句賣點，一句話帶感覺，可用驚嘆號，8～12 字，只能一行。
-- tags3：三個標籤，特性｜穿法或尺碼｜族群感，每個 4～5 字（例：["疊穿搭配","不挑身型","日常慵懶感"]）。
-字數是硬限制，做圖時每段都只能排在一行，不可超過。
-只輸出 JSON，格式：{"tag":"...","title":["...","..."],"slogan":"...","tags3":["...","...","..."]}，不要任何其他文字。`;
+const BRAND_SYS = `你是 VV DOUBLE（台灣大尺碼女裝品牌）的美編，負責寫 P1 商品圖上的四段文字。
+核心原則：每一段都只講「衣服本身的事實」（材質、版型、設計細節、穿法、尺碼、穿起來的感覺）。
+品名裡常夾雜行銷口號、系列名、情境句（例：下班後換我了、太涼了吧、借我穿一下、木槿花開），這些一律忽略、不得出現也不得延伸；只取品名中的材質、版型、設計細節、品項四類字。
 
-const LIMITS = { tag: 7, titleLine: 6, slogan: 12, tagItem: 5 };
-function copyTooLong(o) {
+品牌鐵律（全部遵守）：
+1. 絕不販賣身形焦慮，不先戳痛點再給解法。
+2. 禁用字：顯胖、遮肉、藏肉、修飾缺點。「顯瘦」不可當賣點。
+3. 正向框架：舒適、合身、自在；衣服配合人，不是人配合衣服。
+4. 不提競品、不做比較。不帶價格。永久禁用破折號「——」。
+5. 不做負面行銷、飢餓行銷。
+6. 語氣平實、口語、像店員在介紹，不要文青、不要擬人、不要雙關、不要誇飾、不要「每天都有小亮點」這類空話。
+7. 大標不得出現「顯瘦」「修飾」；賣點與三標籤可用「修飾身型」「修身」「順身」。
+目標客群稱呼：棉花糖女孩、肉肉女孩。
+
+四段寫法：
+- tag（情境標籤）：優先從句庫挑一個最合適的：#不修邊幅、#每天都想穿、#剛剛好的浪漫、#精緻小巧思、#穿搭小心機、#夏日降溫提案、#日常慵懶感、#舒服到不想脫、#秋冬必備款。真的都不合才自己寫，必須同樣是講「穿衣狀態」的 4～6 字短句。
+- title（商品大標，兩行）：就是衣服名稱，只用「版型或設計詞＋材質＋品項」組成，例：["自在慵懶落肩","寬鬆長袖上衣"]、["彈力蕾絲撞色","包邊透膚上衣"]、["燈芯絨領片","牛仔外套"]。每行 4～6 字，語意自然斷句，不加形容、不加情境。
+- slogan（一句賣點）：一句話講穿起來的事實，8～12 字，最多一個驚嘆號。範例：寬鬆版型設計，不貼身更自在！／舒服到不想脫下來！／撞色細節，讓簡約多一點亮點／輕鬆穿出好比例，舒服一整天／親膚舒適材質，推薦包色！
+- tags3（三標籤）：格式「特性｜尺碼或穿法｜族群」。第 1 個講這件的材質或版型特點（4～5 字，如：挺版材質、親膚彈性、落肩修飾身型、可調節肩帶、舒適彈性腰圍）；第 2 個是尺碼標籤，若 user 訊息有提供「尺碼標籤」就原封不動使用，沒有就寫穿法（如：疊穿搭配、單穿好看）；第 3 個從族群詞庫選：不挑身型、不限身型、肉肉友善款、肉肉女友善、日常百搭、精緻系穿搭、日常慵懶感。
+
+字數是硬限制，做圖時每段只能排在一行。
+只輸出 JSON：{"tag":"...","title":["...","..."],"slogan":"...","tags3":["...","...","..."]}，不要任何其他文字。`;
+
+const LIMITS = { tag: 7, titleLine: 6, slogan: 12, tagItem: 6 };
+function copyTooLong(o, sizeTag) {
   const t = (o.tag || "").replace(/^#/, "");
   if (t.length > LIMITS.tag) return true;
   if ((o.titleLines || []).some((l) => l.length > LIMITS.titleLine)) return true;
-  if ((o.slogan || "").length > LIMITS.slogan + 1) return true; // 允許標點 1 字
-  if ((o.tags3 || []).some((x) => x.length > LIMITS.tagItem)) return true;
+  if ((o.slogan || "").replace(/[！!，,。]/g, "").length > LIMITS.slogan) return true;
+  if ((o.tags3 || []).some((x) => x !== sizeTag && x.length > LIMITS.tagItem)) return true;
   return false;
 }
 
-async function anthropicCopyOnce(key, title, desc, mode, extraNote) {
-  const user = `取向：${mode || "新品介紹"}\nShopline 品名：${title}\n商品描述：${(desc || "").slice(0, 500)}${extraNote ? "\n\n" + extraNote : ""}`;
+// 品名過濾：去《》〈〉【】內容、去尾端顏色、去常見行銷口號前綴，只留設計詞＋品項
+function cleanProductName(name) {
+  let s = String(name || "");
+  s = s.replace(/[《〈【\[][^》〉】\]]*[》〉】\]]/g, "");
+  s = s.replace(/[-－–][^-－–]{1,6}$/, ""); // -藍色 / -淺灰
+  s = s.replace(/顯瘦/g, "");
+  return s.trim();
+}
+
+// 從 Shopline 商品描述的尺寸表抓尺碼：<td>SIZE (CM)</td><td>F</td>... 或 SM/ML/XL2L/3L4L/5L6L
+function extractSizes(descHtml) {
+  const h = String(descHtml || "");
+  const i = h.search(/SIZE\s*\(?CM\)?/i);
+  if (i < 0) return [];
+  const rowEnd = h.indexOf("</tr>", i);
+  const row = h.slice(i, rowEnd > 0 ? rowEnd : i + 2000);
+  const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => m[1].replace(/<[^>]+>/g, "").trim()).filter(Boolean);
+  return cells.filter((c) => !/SIZE/i.test(c) && c.length <= 6);
+}
+function sizeTagFor(sizes) {
+  if (!sizes || !sizes.length) return "";
+  if (sizes.length === 1 && /^F$/i.test(sizes[0])) return "60-120kg皆可穿";
+  const tail = (code) => { const t = String(code).toUpperCase().match(/\d+[A-Z]|[A-Z]/g); return t ? t[t.length - 1] : code; };
+  return `${tail(sizes[0])}-${tail(sizes[sizes.length - 1])}都能穿`;
+}
+
+async function anthropicCopyOnce(key, title, desc, mode, sizeTag, extraNote) {
+  const user = `取向：${mode || "新品介紹"}\n品名（已過濾）：${title}\n商品描述：${(desc || "").slice(0, 500)}${sizeTag ? `\n尺碼標籤（tags3 第 2 個，原封不動使用）：${sizeTag}` : ""}${extraNote ? "\n\n" + extraNote : ""}`;
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -63,18 +90,20 @@ async function anthropicCopyOnce(key, title, desc, mode, extraNote) {
   if (tag && tag[0] !== "#") tag = "#" + tag;
   let titleLines = Array.isArray(o.title) ? o.title : String(o.title || "").split(/[\n／/]/);
   titleLines = titleLines.map((s) => String(s).trim()).filter(Boolean).slice(0, 2);
-  const tags3 = (o.tags3 || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 3);
+  let tags3 = (o.tags3 || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 3);
+  if (sizeTag && tags3.length === 3) tags3[1] = sizeTag; // 尺碼標籤一律用系統算的
   return { tag, titleLines, slogan: (o.slogan || "").trim(), tags3 };
 }
 
-async function anthropicCopy(key, title, desc, mode) {
-  let o = await anthropicCopyOnce(key, title, desc, mode);
-  if (copyTooLong(o)) {
-    // 超過字數：帶著上一版結果要求縮短，重生一次
+async function anthropicCopy(key, rawTitle, desc, mode, descHtml) {
+  const title = cleanProductName(rawTitle);
+  const sizeTag = sizeTagFor(extractSizes(descHtml));
+  let o = await anthropicCopyOnce(key, title, desc, mode, sizeTag);
+  if (copyTooLong(o, sizeTag)) {
     const note = `上一版太長，不符合字數硬限制，請縮短後重寫：${JSON.stringify({ tag: o.tag, title: o.titleLines, slogan: o.slogan, tags3: o.tags3 })}`;
-    o = await anthropicCopyOnce(key, title, desc, mode, note);
+    o = await anthropicCopyOnce(key, title, desc, mode, sizeTag, note);
   }
-  return { tag: o.tag, title: o.titleLines.join("\n"), titleLines: o.titleLines, slogan: o.slogan, tags3: o.tags3 };
+  return { tag: o.tag, title: o.titleLines.join("\n"), titleLines: o.titleLines, slogan: o.slogan, tags3: o.tags3, sizeTag };
 }
 
 const SL = "https://open.shopline.io/v1";
@@ -390,10 +419,10 @@ exports.shopline = onRequest(
           // 商品文案 AI 生成（P1 四段）；API Key 存後端 secret，同事不需輸入
           const key = ANTHROPIC_KEY.value();
           if (!key) return res.status(500).json({ error: "後端尚未設定 ANTHROPIC_KEY" });
-          const { title, desc, mode } = req.body;
+          const { title, desc, mode, descHtml } = req.body;
           if (!title) return res.status(400).json({ error: "缺少商品名稱" });
           try {
-            const ref = await anthropicCopy(key, title, desc, mode);
+            const ref = await anthropicCopy(key, title, desc, mode, descHtml);
             return res.json({ ok: true, ref });
           } catch (e) {
             return res.status(502).json({ error: "AI 生成失敗：" + (e.message || "") });
