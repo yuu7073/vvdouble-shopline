@@ -13,7 +13,7 @@
   header .sp{flex:1}
   .field{display:flex;align-items:center;gap:6px}
   .field input{padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:14px}
-  main{max-width:1200px;margin:20px auto;padding:0 16px}
+  main{max-width:1600px;margin:20px auto;padding:0 16px}
   .card{background:#fff;border-radius:10px;padding:18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
   .drop{border:2px dashed var(--blue);border-radius:10px;padding:36px;text-align:center;color:var(--blue);background:#f5f8fd;cursor:pointer}
   .drop.over{background:#e3ecfa}
@@ -30,21 +30,21 @@
   tr.warn td{background:#fff6e5}
   tr.done td{background:#eaf7ef}
   .thumbs{display:flex;gap:8px;flex-wrap:wrap;padding:4px 6px 4px 0}
-  .thumbs img{width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
+  .thumbs img{width:96px;height:96px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
   .thumbs img.first{outline:2px solid var(--orange)}
   .thumbs img{cursor:grab;-webkit-user-drag:none;user-select:none;touch-action:none}
-  .dragghost{position:fixed;width:44px;height:44px;object-fit:cover;border-radius:4px;border:2px solid var(--blue);opacity:.85;pointer-events:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+  .dragghost{position:fixed;width:96px;height:96px;object-fit:cover;border-radius:4px;border:2px solid var(--blue);opacity:.85;pointer-events:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.25)}
   .th.dragging img{opacity:.3}
   body.nodrag{cursor:grabbing;user-select:none}
   .th{position:relative;display:inline-block}
-  .th.ins-l::before,.th.ins-r::after{content:'';position:absolute;top:-4px;bottom:-4px;width:3px;background:var(--blue);border-radius:2px}
+  .th.ins-l::before,.th.ins-r::after{content:'';position:absolute;top:-4px;bottom:-4px;width:4px;background:var(--blue);border-radius:2px}
   .th.ins-l::before{left:-6px}
   .th.ins-r::after{right:-6px}
-  .th .x{position:absolute;top:-6px;right:-6px;width:16px;height:16px;line-height:14px;text-align:center;border-radius:50%;background:#fff;color:var(--red);border:1px solid var(--red);font-size:12px;cursor:pointer;display:none}
+  .th .x{position:absolute;top:-7px;right:-7px;width:20px;height:20px;line-height:18px;text-align:center;border-radius:50%;background:#fff;color:var(--red);border:1px solid var(--red);font-size:12px;cursor:pointer;display:none}
   .th:hover .x{display:block}
   .thumbs img.over{opacity:.35;outline:2px solid var(--red)}
   .thumbs img.unm{outline:2px dashed #b35a0c}
-  .thumbs:empty{min-height:46px;min-width:46px;border:1px dashed var(--line);border-radius:4px}
+  .thumbs:empty{min-height:98px;min-width:98px;border:1px dashed var(--line);border-radius:4px}
   .thumbs.over{background:#eef3fb;border-radius:4px}
   .tag{display:inline-block;padding:2px 7px;border-radius:10px;font-size:12px;background:#eef2f8;margin-right:4px}
   .tag.red{background:#fdecea;color:var(--red)}
@@ -56,7 +56,7 @@
   .prog{height:8px;background:#e5e9f0;border-radius:4px;overflow:hidden;margin:8px 0}
   .prog i{display:block;height:100%;background:var(--orange);width:0;transition:width .2s}
   .hidden{display:none}
-  .tabs{display:flex;gap:6px;max-width:1200px;margin:16px auto 0;padding:0 16px}
+  .tabs{display:flex;gap:6px;max-width:1600px;margin:16px auto 0;padding:0 16px}
   .tab{padding:10px 18px;border-radius:10px 10px 0 0;cursor:pointer;font-weight:600;border:1px solid var(--line);border-bottom:0;opacity:.75}
   .tab.t-orange{background:#f7c99a;color:#5a2d00}
   .tab.t-yellow{background:#f5e38a;color:#4a3b00}
@@ -124,7 +124,7 @@
   <div class="card">
     <table id="tbl">
       <thead><tr>
-        <th style="width:30px">#</th><th>資料夾 / 顏色</th><th>對應 Shopline 商品</th><th>商品圖</th><th>更多商品圖片</th><th style="width:160px">狀態</th>
+        <th style="width:30px">#</th><th style="width:150px">資料夾 / 顏色</th><th style="width:200px">對應 Shopline 商品</th><th style="width:440px">商品圖</th><th>更多商品圖片</th><th style="width:120px">狀態</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -462,16 +462,16 @@ function makeThumb(fobj){
   if (fobj.thumb || fobj.thumbing) return Promise.resolve();
   fobj.thumbing = true;
   var done = function(c){ try { fobj.thumb = c.toDataURL('image/jpeg', 0.8); } catch(e){ fobj.thumb = BLANK; } fobj.thumbing = false; };
-  var draw = function(src, w, h){ var r = 120 / Math.max(w, h); var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w*r)); c.height = Math.max(1, Math.round(h*r)); c.getContext('2d').drawImage(src, 0, 0, c.width, c.height); done(c); };
+  var draw = function(src, w, h){ var r = 240 / Math.max(w, h); var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w*r)); c.height = Math.max(1, Math.round(h*r)); c.getContext('2d').drawImage(src, 0, 0, c.width, c.height); done(c); };
   if (window.createImageBitmap) {
-    return createImageBitmap(fobj.file, { resizeWidth: 160, resizeQuality: 'low' }).then(function(bm){ draw(bm, bm.width, bm.height); bm.close && bm.close(); }).catch(function(){ fobj.thumbing = false; return makeThumbImg(fobj); });
+    return createImageBitmap(fobj.file, { resizeWidth: 320, resizeQuality: 'medium' }).then(function(bm){ draw(bm, bm.width, bm.height); bm.close && bm.close(); }).catch(function(){ fobj.thumbing = false; return makeThumbImg(fobj); });
   }
   return makeThumbImg(fobj);
 }
 function makeThumbImg(fobj){
   return new Promise(function(res){
     var url = URL.createObjectURL(fobj.file); var im = new Image();
-    im.onload = function(){ var r = 120 / Math.max(im.width, im.height); var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.width*r)); c.height = Math.max(1, Math.round(im.height*r)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); try { fobj.thumb = c.toDataURL('image/jpeg', 0.8); } catch(e){ fobj.thumb = BLANK; } URL.revokeObjectURL(url); fobj.thumbing = false; res(); };
+    im.onload = function(){ var r = 240 / Math.max(im.width, im.height); var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.width*r)); c.height = Math.max(1, Math.round(im.height*r)); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); try { fobj.thumb = c.toDataURL('image/jpeg', 0.8); } catch(e){ fobj.thumb = BLANK; } URL.revokeObjectURL(url); fobj.thumbing = false; res(); };
     im.onerror = function(){ fobj.thumb = BLANK; fobj.thumbing = false; URL.revokeObjectURL(url); res(); };
     im.src = url;
   });
@@ -526,7 +526,7 @@ document.addEventListener('pointermove', function(e){
   if (!pd) return;
   if (!pd.active) { if (Math.abs(e.clientX-pd.x) + Math.abs(e.clientY-pd.y) < 6) return; pd.active = true;
     var g = pd.src.cloneNode(); g.className = 'dragghost'; document.body.appendChild(g); pd.ghost = g; pd.src.closest('.th').classList.add('dragging'); document.body.classList.add('nodrag'); }
-  pd.ghost.style.left = (e.clientX - 22) + 'px'; pd.ghost.style.top = (e.clientY - 22) + 'px';
+  pd.ghost.style.left = (e.clientX - 48) + 'px'; pd.ghost.style.top = (e.clientY - 48) + 'px';
   var under = document.elementFromPoint(e.clientX, e.clientY);
   var z = dropZoneOf(under);
   clearOver();
