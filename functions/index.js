@@ -629,6 +629,15 @@ exports.shopline = onRequest(
           return res.json({ items: out.slice(0, 30) });
         }
 
+        case "deleteCleanupJob": {
+          const snap = await db.ref(`/cleanupJobs/${req.body.jobId}`).get();
+          if (!snap.exists()) return res.status(404).json({ error: "找不到任務" });
+          const st = (snap.val() || {}).status;
+          if (st === "pending" || st === "running") return res.status(400).json({ error: "等待中／執行中的任務不能刪除，請先取消" });
+          await db.ref(`/cleanupJobs/${req.body.jobId}`).remove();
+          return res.json({ ok: true });
+        }
+
         case "runCleanupNow": {
           const snap = await db.ref(`/cleanupJobs/${req.body.jobId}`).get();
           if (!snap.exists()) return res.status(404).json({ error: "找不到任務" });

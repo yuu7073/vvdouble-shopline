@@ -989,11 +989,14 @@ $('#btnLoadCamp').addEventListener('click', async function(){
     campRows.push({ code: code, price: iPrice>=0 ? num(r[iPrice]) : null, sale: iSale>=0 ? num(r[iSale]) : null, products: [], result: '' });
   });
   if(!catList.length){ try{ var cj = await api('categories', {}); catList = cj.items; var sel=$('#campCat'); if(sel.options.length<=1){ sel.innerHTML='<option value="">（不加分類）</option>'; catList.forEach(function(c){ var o=document.createElement('option'); o.value=c.id; o.textContent=c.name; sel.appendChild(o); }); } }catch(e){} }
+  var seenPid = {};
   for(var i=0;i<campRows.length;i++){
     var row = campRows[i];
     try{
       var j = await api('searchFull', {query: row.code});
       row.products = (j.items||[]).filter(function(p){ return p.sku.indexOf(row.code)===0 || (p.variations||[]).some(function(v){ return (v.sku||'').indexOf(row.code)===0; }); });
+      // 同一商品若已在前面的組頭出現（例如規格跨兩個組頭），只算一次，否則 Shopline 會整批退回
+      row.products = row.products.filter(function(p){ if(seenPid[p.id]){ logC('－ ' + row.code + '：' + p.title + ' 已在組頭 ' + seenPid[p.id] + ' 出現，只算一次'); return false; } seenPid[p.id] = row.code; return true; });
       logC((row.products.length?'✔ ':'？ ') + row.code + ' → ' + row.products.length + ' 個商品');
     }catch(e){ logC('✖ ' + row.code + '：' + e.message); }
     $('#bar3').style.width = Math.round((i+1)/campRows.length*100)+'%';
@@ -1048,13 +1051,17 @@ $('#btnRunCamp').addEventListener('click', async function(){
   if(!confirm('將對 ' + all.length + ' 個商品執行：' + steps.join('、') + '。\n（不適用折扣商品需手動，執行後會列清單）確定？')) return;
   this.disabled = true; log3El.textContent = ''; var done = 0, total = all.length + 1;
   var startISO = start ? new Date(start).toISOString() : null; var createdFlash = [], manualExcl = [];
+  // 開始時間已過：上架改為立即、促銷價開始時間改為現在+2分鐘（Shopline 不接受過去的開始時間）
+  var startPast = !!start && new Date(start).getTime() <= Date.now() + 60000;
+  var flashStart = start; if(startPast && st.flash){ var fs = new Date(Date.now() + 2*60000); fs.setSeconds(0,0); flashStart = fs.getFullYear()+'-'+('0'+(fs.getMonth()+1)).slice(-2)+'-'+('0'+fs.getDate()).slice(-2)+'T'+('0'+fs.getHours()).slice(-2)+':'+('0'+fs.getMinutes()).slice(-2); logC('開始時間已過，限時促銷價開始時間改為 ' + flashStart.replace('T',' ')); }
+  if(startPast && st.pub) logC('開始時間已過，商品改為立即上架');
 
   // 批次：下架、分類（每 100 個一批）
   if(st.unpub){
     for (const grp of chunk(all, 100)){
       try{ var r1 = await api('bulkStatus', {products: grp.map(function(x){ return {id:x.p.id, status:'draft'}; })});
         var errs = (r1.body && r1.body.errors) || []; logC('下架 ' + grp.length + ' 個：成功 ' + ((r1.body && r1.body.updated_product_ids)||[]).length + (errs.length ? '，失敗 ' + errs.length : ''));
-        errs.forEach(function(e){ var x = all.filter(function(y){return y.p.id===e.id;})[0]; if(x) x.row.result += '✖ 下架：' + e.message + ' '; });
+        errs.forEach(function(e){ var x = all.filter(function(y){return y.p.id===e.id;})[0]; if(x){ x.row.result += '✖ 下架：' + (e.message||'') + ' '; logC('　✖ ' + x.p.title + '：' + (e.message||'')); } else logC('　✖ ' + JSON.stringify(e).slice(0,150)); });
       }catch(e){ logC('✖ 下架失敗：' + e.message); grp.forEach(function(x){ x.row.result += '✖ 下架 '; }); }
     }
   }
@@ -1069,12 +1076,12 @@ $('#btnRunCamp').addEventListener('click', async function(){
     var x = all[i], p = x.p, msgs = [];
     try{
       var fields = {};
-      if(st.pub) fields.schedule_publish_at = startISO;
+      if(st.pub && !startPast) fields.schedule_publish_at = startISO;
       if(st.sale){ fields.available_start_time = null; fields.available_end_time = null; }
       if(Object.keys(fields).length){
         var u = await api('updateProduct', {productId: p.id, fields: fields});
         if(!u.ok) throw new Error('更新失敗 ' + JSON.stringify(u.error).slice(0,150));
-        if(st.pub && !(u.now && u.now.schedule_publish_at)) msgs.push('✖ 上架時間沒寫進去');
+        if(st.pub && !startPast && !(u.now && u.now.schedule_publish_at)) msgs.push('✖ 上架時間沒寫進去');
       }
       if(st.excl && !p.is_excluded_promotion){ manualExcl.push(p.title); x.row.result += '⚠ 手動開不適用折扣 '; }
       if(st.tag){ var tg = await api('addTags', {productId: p.id, tags: tags}); if(!tg.ok) msgs.push('✖ 標籤 ' + JSON.stringify(tg.error).slice(0,100)); }
@@ -1082,6 +1089,14 @@ $('#btnRunCamp').addEventListener('click', async function(){
     x.row.result += msgs.length ? msgs.join(' ') + ' ' : '';
     logC((msgs.length ? '✖ ' : '✔ ') + p.title + (msgs.length ? '：' + msgs.join(' ') : ''));
     done++; $('#bar3').style.width = Math.round(done/total*100)+'%';
+  }
+  if(st.pub && startPast){
+    for (const grp of chunk(all, 100)){
+      try{ var rp = await api('bulkStatus', {products: grp.map(function(x){ return {id:x.p.id, status:'active'}; })});
+        var perr = (rp.body && rp.body.errors) || []; logC('立即上架 ' + grp.length + ' 個：成功 ' + ((rp.body && rp.body.updated_product_ids)||[]).length + (perr.length ? '，失敗 ' + perr.length : ''));
+        perr.forEach(function(e){ var x = all.filter(function(y){return y.p.id===e.id;})[0]; if(x){ x.row.result += '✖ 上架：' + (e.message||'') + ' '; logC('　✖ ' + x.p.title + '：' + (e.message||'')); } });
+      }catch(e){ logC('✖ 上架失敗：' + e.message); grp.forEach(function(x){ x.row.result += '✖ 上架 '; }); }
+    }
   }
   // 限時促銷價
   if(st.flash && flashItems.length){
@@ -1091,7 +1106,7 @@ $('#btnRunCamp').addEventListener('click', async function(){
     var already = {}, conflict = {};
     for (var si=0; si<sameTitle.length; si++){ try{ var fc = await api('getFlashCampaign', {id: sameTitle[si].id}); (fc.product_ids||[]).forEach(function(id){ already[id] = sameTitle[si].title; }); fc.price_sets.forEach(function(ps){ if(ps.product_id) already[ps.product_id] = sameTitle[si].title; }); }catch(e){} }
     // 其他「進行中／即將開始」且時間重疊的促銷活動：同一商品不能重複在裡面，先找出來
-    var sIso = new Date(start).getTime(), eIso = new Date(end).getTime();
+    var sIso = new Date(flashStart).getTime(), eIso = new Date(end).getTime();
     var others = existing.filter(function(c){ if(sameTitle.indexOf(c) >= 0) return false; var cs = new Date((c.start_at||'').replace(' ','T') + (/(Z|[+-]\d\d:?\d\d)$/.test(c.start_at||'') ? '' : 'Z')).getTime(), ce = new Date((c.end_at||'').replace(' ','T') + (/(Z|[+-]\d\d:?\d\d)$/.test(c.end_at||'') ? '' : 'Z')).getTime(); return !(isNaN(cs)||isNaN(ce)) && ce > Date.now() && cs < eIso && ce > sIso; });
     var wantIds = {}; flashItems.forEach(function(x){ wantIds[x.p.id] = true; });
     for (var oi=0; oi<others.length; oi++){ try{ var oc = await api('getFlashCampaign', {id: others[oi].id}); var ids = (oc.product_ids||[]).concat((oc.price_sets||[]).map(function(ps){ return ps.product_id; })); ids.forEach(function(id){ if(id && wantIds[id] && !already[id]) conflict[id] = others[oi].title; }); }catch(e){} }
@@ -1112,8 +1127,12 @@ $('#btnRunCamp').addEventListener('click', async function(){
         return { product_id: x.p.id, price: base, price_sale: x.row.sale };
       });
       try{
-        var c = await api('createFlashCampaign', {title:name, start_at: toUTC(start), end_at: toUTC(end), price_sets: sets, uploader: who});
-        if(!c.ok){ var em = JSON.stringify(c.error||''); throw new Error(/other upcoming or ongoing flash/i.test(em) ? '有商品已在其他時間重疊的促銷活動中（請看上方清單；若上方沒列出，代表那個活動不在最近 250 筆內，請到後台「商品限時促銷價」查）' : em.slice(0,200)); }
+        var c = await api('createFlashCampaign', {title:name, start_at: toUTC(flashStart), end_at: toUTC(end), price_sets: sets, uploader: who});
+        if(!c.ok){ var em = JSON.stringify(c.error||''); var emsg = (c.error && c.error.message) || '';
+          throw new Error(/other upcoming or ongoing flash/i.test(em) ? '有商品已在其他時間重疊的促銷活動中（請看上方清單；若上方沒列出，代表那個活動不在最近 250 筆內，請到後台「商品限時促銷價」查）'
+            : /start_at.*greater than/i.test(em) ? '開始時間已過，Shopline 不接受，請把開始時間改到現在之後'
+            : (c.status===422 && !emsg) ? 'Shopline 退回（422）：這批裡有重複的商品或已不存在的商品，請按「重新對照」再執行一次'
+            : em.slice(0,200)); }
         logC('✔ 建立限時促銷價「' + name + '」：' + c.count + ' 品'); createdFlash.push(c.id);
         // 回讀比對
         try{
@@ -1150,12 +1169,14 @@ async function loadJobs(){
     box.innerHTML = '<table><thead><tr><th>活動</th><th>收尾時間</th><th>商品數</th><th>狀態</th><th>操作者</th><th></th></tr></thead><tbody>' + j.items.map(function(it){
       var stText = {pending:'等待中', running:'執行中', done:(it.failed ? '完成，' + it.failed + ' 筆失敗' : '✔ 完成'), cancelled:'已取消'}[it.status] || it.status;
       var btn = it.status==='pending' ? '<button class="btn ghost mini" data-run="' + it.id + '">立即執行</button> <button class="btn ghost mini" data-cancel="' + it.id + '">取消</button>' : (it.results ? '<button class="btn ghost mini" data-show="' + it.id + '">明細</button>' : '');
+      if(it.status!=='pending' && it.status!=='running') btn += ' <button class="btn ghost mini" data-del="' + it.id + '">刪除</button>';
       if((it.manualOff||[]).length) btn += ' <button class="btn ghost mini" data-off="' + it.id + '">關閉不適用折扣腳本（' + it.manualOff.length + '）</button>';
       return '<tr' + (it.status==='done' && it.failed ? ' class="bad"' : '') + '><td>' + it.title + '</td><td>' + fmtDT(it.endAt) + '</td><td>' + it.count + '</td><td>' + stText + '</td><td>' + (it.by||'') + '</td><td>' + btn + '</td></tr>';
     }).join('') + '</tbody></table>';
     window.__jobs = j.items;
     Array.prototype.forEach.call(box.querySelectorAll('[data-run]'), function(b){ b.addEventListener('click', async function(){ if(!confirm('現在就執行收尾？')) return; this.disabled = true; try{ var r = await api('runCleanupNow', {jobId: this.dataset.run}); logC('收尾完成，失敗 ' + r.failed + ' 筆'); }catch(e){ logC('✖ 收尾失敗：' + e.message); } loadJobs(); }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-cancel]'), function(b){ b.addEventListener('click', async function(){ if(!confirm('取消這個收尾任務？')) return; await api('cancelCleanup', {jobId: this.dataset.cancel}); loadJobs(); }); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-del]'), function(b){ b.addEventListener('click', async function(){ if(!confirm('刪除這筆收尾任務紀錄？')) return; try{ await api('deleteCleanupJob', {jobId: this.dataset.del}); }catch(e){ logC('✖ 刪除失敗：' + e.message); } loadJobs(); }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-off]'), function(b){ b.addEventListener('click', function(){ var it = window.__jobs.filter(function(x){return x.id===b.dataset.off;})[0]; showScript(exclScript(it.manualOff, false)); }); });
     Array.prototype.forEach.call(box.querySelectorAll('[data-show]'), function(b){ b.addEventListener('click', function(){ var it = window.__jobs.filter(function(x){return x.id===b.dataset.show;})[0]; log3El.textContent = ''; Object.keys(it.results).forEach(function(k){ logC(((it.titles||{})[k] || k) + '：' + it.results[k]); }); }); });
   }catch(e){ box.textContent = '✖ ' + e.message; }
