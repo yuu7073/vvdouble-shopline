@@ -196,7 +196,7 @@
       <label><input type="checkbox" id="stPub" checked> 上架時間＝活動開始</label>
       <label><input type="checkbox" id="stExcl" checked> 列出需手動開啟「不適用折扣」的商品</label>
       <label><input type="checkbox" id="stTag" checked> 加標籤</label>
-      <label><input type="checkbox" id="stSale" checked> 關閉預設銷售時間</label>
+      <label><input type="checkbox" id="stSale" checked> 銷售時間＝活動開始</label>
       <label><input type="checkbox" id="stFlash" checked> 建立限時促銷價</label>
     </div>
     <div class="steps" style="margin-top:6px;padding-top:8px;border-top:1px dashed var(--line)">
@@ -1042,17 +1042,18 @@ $('#btnRunCamp').addEventListener('click', async function(){
   if((st.pub || st.flash) && !start){ alert('請填活動開始時間'); return; }
   if(st.flash && (!end || !title)){ alert('限時促銷價需要活動名稱與結束時間'); return; }
   if(st.cat && !catId){ alert('請選活動分類，或取消勾選「加入活動分類」'); return; }
+  if(st.sale && !start){ alert('銷售時間需要活動開始時間，或取消勾選「銷售時間＝活動開始」'); return; }
   if(st.tag && !tags.length){ alert('請填標籤，或取消勾選「加標籤」'); return; }
   if(tags.some(function(t){ return t.length<3; })){ alert('Shopline 標籤至少 3 個字元：' + tags.filter(function(t){return t.length<3;}).join('、')); return; }
   var todo = campRows.filter(function(r){ return r.products.length; });
   var all = []; todo.forEach(function(r){ r.products.forEach(function(p){ all.push({row:r, p:p}); }); });
   var flashItems = st.flash ? all.filter(function(x){ return x.row.sale != null; }) : [];
-  var steps = []; if(st.unpub) steps.push('下架'); if(st.cat) steps.push('加分類'); if(st.pub) steps.push('上架時間 ' + start.replace('T',' ')); if(st.excl) steps.push('列不適用折扣清單'); if(st.tag) steps.push('標籤 ' + tags.join('/')); if(st.sale) steps.push('關銷售時間'); if(st.flash) steps.push('限時促銷價 ' + flashItems.length + ' 品');
+  var startPast = !!start && new Date(start).getTime() <= Date.now() + 60000;
+  var steps = []; if(st.unpub) steps.push('下架'); if(st.cat) steps.push('加分類'); if(st.pub) steps.push('上架時間 ' + start.replace('T',' ')); if(st.excl) steps.push('列不適用折扣清單'); if(st.tag) steps.push('標籤 ' + tags.join('/')); if(st.sale) steps.push('銷售時間 ' + (startPast ? '立即' : start.replace('T',' '))); if(st.flash) steps.push('限時促銷價 ' + flashItems.length + ' 品');
   if(!confirm('將對 ' + all.length + ' 個商品執行：' + steps.join('、') + '。\n（不適用折扣商品需手動，執行後會列清單）確定？')) return;
   this.disabled = true; log3El.textContent = ''; var done = 0, total = all.length + 1;
   var startISO = start ? new Date(start).toISOString() : null; var createdFlash = [], manualExcl = [];
   // 開始時間已過：上架改為立即、促銷價開始時間改為現在+2分鐘（Shopline 不接受過去的開始時間）
-  var startPast = !!start && new Date(start).getTime() <= Date.now() + 60000;
   var flashStart = start; if(startPast && st.flash){ var fs = new Date(Date.now() + 2*60000); fs.setSeconds(0,0); flashStart = fs.getFullYear()+'-'+('0'+(fs.getMonth()+1)).slice(-2)+'-'+('0'+fs.getDate()).slice(-2)+'T'+('0'+fs.getHours()).slice(-2)+':'+('0'+fs.getMinutes()).slice(-2); logC('開始時間已過，限時促銷價開始時間改為 ' + flashStart.replace('T',' ')); }
   if(startPast && st.pub) logC('開始時間已過，商品改為立即上架');
 
@@ -1077,7 +1078,7 @@ $('#btnRunCamp').addEventListener('click', async function(){
     try{
       var fields = {};
       if(st.pub && !startPast) fields.schedule_publish_at = startISO;
-      if(st.sale){ fields.available_start_time = null; fields.available_end_time = null; }
+      if(st.sale){ fields.available_start_time = startPast ? null : startISO; fields.available_end_time = null; }
       if(Object.keys(fields).length){
         var u = await api('updateProduct', {productId: p.id, fields: fields});
         if(!u.ok) throw new Error('更新失敗 ' + JSON.stringify(u.error).slice(0,150));
