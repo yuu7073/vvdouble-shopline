@@ -854,6 +854,7 @@ $('#btnParse').addEventListener('click', async function(){
   var iFab = colIndex(header, ['面料特性']);
   var iFeat = colIndex(header, ['產品特性(文案+材質)','產品特性']);
   var iSize = colIndex(header, ['尺寸表']);
+  var iCode = colIndex(header, ['組頭','貨號','款號']);
   if (iName<0 || iFab<0 || iFeat<0 || iSize<0){ $('#tsvMsg').textContent = '找不到必要欄位（名稱／面料特性／產品特性／尺寸表），請連同標題列一起複製'; return; }
   descItems = [];
   rows.slice(1).forEach(function(r){
@@ -863,7 +864,7 @@ $('#btnParse').addEventListener('click', async function(){
     if(!fab.trim()) warn.push('缺面料特性'); if(!feat.trim()) warn.push('缺產品特性'); if(!size.trim()) warn.push('缺尺寸表');
     var html = buildDesc(fab, feat, size);
     var sz = parseSizes(size); if(!sz.rows.length) warn.push('尺寸表解析不到數據'); if(!sz.models.length) warn.push('沒有模特兒資料'); if(!Object.keys(parseFabric(fab)).length) warn.push('面料特性無數值（不放量表）');
-    descItems.push({name:name, html:html, warn:warn, products:[], status:''});
+    descItems.push({name:name, code: iCode>=0 ? (r[iCode]||'').trim() : '', html:html, warn:warn, products:[], status:''});
   });
   $('#tsvMsg').textContent = '讀到 ' + descItems.length + ' 款，對照商品中…';
   log2El.textContent=''; 
@@ -872,6 +873,12 @@ $('#btnParse').addEventListener('click', async function(){
     try{
       var j = await api('search', {query: it.name});
       it.products = (j.items||[]).filter(function(p){ return p.title === it.name || p.title.indexOf(it.name + '-') === 0; }).map(function(p){ return {id:p.id, title:p.title, status:p.status}; });
+      if(!it.products.length && it.code){
+        // 名稱對不到時改用組頭（貨號開頭）對
+        var j2 = await api('searchFull', {query: it.code});
+        it.products = (j2.items||[]).filter(function(p){ return (p.sku||'').indexOf(it.code)===0 || (p.variations||[]).some(function(v){ return (v.sku||'').indexOf(it.code)===0; }); }).map(function(p){ return {id:p.id, title:p.title, status:p.status}; });
+        if(it.products.length){ it.warn.push('名稱與後台不同（後台：' + it.products[0].title.replace(/-[^-]*$/,'') + '），已用組頭 ' + it.code + ' 對到'); }
+      }
       logD((it.products.length?'✔ ':'？ ') + it.name + ' → ' + it.products.length + ' 個商品');
     }catch(e){ logD('✖ ' + it.name + '：' + e.message); }
     $('#bar2').style.width = Math.round((i+1)/descItems.length*100)+'%';
