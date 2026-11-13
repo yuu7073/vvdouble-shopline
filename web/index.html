@@ -765,19 +765,20 @@ function parseSizes(t){
   var sizes=[], data={};
   sizeBlock.split('\n').forEach(function(line){ line=line.trim(); if(!line) return;
     var m=/^([^\s:：]+)\s*[:：]\s*(.*)$/.exec(line); var size, rest;
-    if(m){ size=m[1]; rest=m[2]; } else { size='F'; rest=line; }
+    if(m && /^[\d.]+(?:-[\d.]+)?\s*cm$/.test(m[2].trim())){ size='F'; rest=m[1]+m[2]; } // 「筒高:15.5cm」這種是部位不是尺寸
+    else if(m){ size=m[1]; rest=m[2]; } else { size='F'; rest=line; }
     var pairs=[], re=/([\u4e00-\u9fff]+)\s*([\d.]+(?:-[\d.]+)?)\s*cm/g, mm;
     while((mm=re.exec(rest))) pairs.push([mm[1], mm[2].replace('-','–')]);
     if(sizes.indexOf(size)<0) sizes.push(size); data[size]=(data[size]||[]).concat(pairs); });
   var order=[]; sizes.forEach(function(s){ data[s].forEach(function(p){ if(order.indexOf(p[0])<0) order.push(p[0]); }); });
   var rows=order.map(function(p){ return [p, sizes.map(function(s){ var f=data[s].filter(function(x){return x[0]===p;})[0]; return f?f[1]:''; })]; });
   var models=[];
-  modelBlock.split(/\n-\s*\n|\n-\n/).forEach(function(chunk){
+  modelBlock.split(/\n\s*-\s*(?:\n|$)/).forEach(function(chunk){
     var lines=chunk.trim().split('\n').map(function(l){return l.trim();}).filter(Boolean); if(!lines.length) return;
-    var m=/Model-(\S+)\s+(\d+)cm\/(\d+)kg\s*(?:著\s*(\S+))?\s*(\S*)/.exec(lines[0]); if(!m) return;
+    var m=/Model-(\S+)\s+(\d+)\s*(?:cm)?\s*\/\s*(\d+)\s*(?:kg)?\s*(?:著\s*(\S+))?\s*(\S*)/.exec(lines[0]); if(!m) return;
     var body=lines.slice(1).join(' ');
     var g=function(k){ var r=new RegExp(k+'\\s*([\\d.]+)cm').exec(body); return r?r[1]:''; };
-    models.push({name:m[1],h:m[2],w:m[3],size:m[4]||(sizes.length===1?sizes[0]:''),feel:m[5]||'',s:g('肩寬'),c:g('胸圍'),wst:g('腰圍'),hip:g('臀圍')});
+    models.push({name:m[1],h:m[2],w:m[3],size:m[4]||(sizes.length===1?sizes[0]:''),feel:m[5]||'',s:g('肩寬?'),c:g('胸圍?'),wst:g('腰圍?'),hip:g('臀圍?')});
   });
   return {sizes:sizes, rows:rows, models:models};
 }
