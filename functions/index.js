@@ -431,11 +431,14 @@ exports.shopline = onRequest(
 
         case "setDescription": {
           // 寫入商品描述（zh-hant），先備份舊內容
-          const { productId, html, uploader, productTitle } = req.body;
+          let { productId, html, uploader, productTitle } = req.body;
           if (!productId || typeof html !== "string") return res.status(400).json({ error: "參數不足" });
           const cur = await slFetch(token, `/products/${productId}?fields[]=description_translations`);
           const old = ((cur.body && cur.body.description_translations) || {})["zh-hant"] || "";
           if (old) await db.ref(`/backups/${productId}/description`).push({ html: old, at: Date.now(), by: uploader || "" });
+          // 舊描述裡已經嵌了實穿影片（YouTube）的話，覆蓋文案時把影片區塊保留在最上面，不要被洗掉
+          const keepEmbed = old.match(new RegExp(`<div class="${EMBED_MARK}"[\\s\\S]*?<\\/iframe>\\s*<\\/div>`));
+          if (keepEmbed && !html.includes(`class="${EMBED_MARK}"`)) html = keepEmbed[0] + html;
           const r = await slFetch(token, `/products/${productId}`, { method: "PUT", json: { description_translations: { "zh-hant": html } } });
           const ok = r.status === 200 || r.status === 201;
           if (ok) await db.ref(`/descUpdates/${productId}`).set({ title: productTitle || "", len: html.length, at: Date.now(), by: uploader || "" });
