@@ -6,6 +6,7 @@ const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { GoogleAuth } = require("google-auth-library");
 const { buildSeo, RULE_VERSION } = require("./seo");
+const weekly = require("./weekly");
 
 admin.initializeApp();
 
@@ -792,6 +793,15 @@ exports.reelsDaily = onSchedule(
   }
 );
 
+// 店長週報 → LINE：店長提交當下由門市營運中心通知（reels?op=weekly），這裡每 10 分鐘巡檢補漏
+exports.weeklyLineSweep = onSchedule(
+  { schedule: "every 10 minutes", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 120, memory: "256MiB" },
+  async () => {
+    const r = await weekly.sweepWeekly(admin.database());
+    if (r.length) console.log("weekly sweep:", JSON.stringify(r));
+  }
+);
+
 const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
 const EMBED_MARK = "vv-reel-embed";
 
@@ -958,7 +968,11 @@ exports.reels = onRequest(
           await db.ref("/youtube/token").set({ refresh_token: j.refresh_token, channel, at: Date.now() });
           return res.send(page("YouTube 授權完成", `已連結頻道：<b>${channel || "(未知)"}</b><br>可以關掉這個分頁，回到程式。`));
         }
-        if (op === "version") return res.json({ reels: "2026-10-30a" });
+        if (op === "weekly") {
+          const r = await weekly.pushWeekly(db, String(req.query.store || ""), String(req.query.week || ""));
+          return res.json({ ok: !!r.ok });
+        }
+        if (op === "version") return res.json({ reels: "2026-11-19a" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -981,6 +995,7 @@ exports.reels = onRequest(
           const src = ev.source || {};
           const id = src.groupId || src.roomId || src.userId;
           if (!id) continue;
+          try { await weekly.handleLineEvent(db, ev); } catch (e) { console.error("weekly owner", e); }
           if (ev.type === "leave" || ev.type === "unfollow") await db.ref(`/line/targets/${id}`).remove();
           else if (["join", "follow", "message", "memberJoined"].includes(ev.type)) await db.ref(`/line/targets/${id}`).set({ type: src.type || "", at: Date.now() });
         }
@@ -1050,6 +1065,12 @@ exports.reels = onRequest(
           if (!req.body.send) return res.json({ ok: true, ...info });
           const r = await linePush(db, req.body.text || `✅ VV 實穿草稿產生器 已連上 LINE（${new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}）`);
           return res.json({ ...info, ...r });
+        }
+
+        case "weeklyStatus": {
+          const ow = await db.ref("/line/weeklyOwner").get();
+          const sent = await db.ref("/line/weeklySent").get();
+          return res.json({ ok: true, owner_set: ow.exists(), owner_at: ow.exists() ? ow.val().at : null, sent: sent.exists() ? sent.val() : {} });
         }
 
         case "lineSummaryNow": {
