@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>門市回報 設定</title>
+<style>
+body{margin:0;padding:20px;font-family:'Noto Sans TC',system-ui,sans-serif;font-size:14px;color:#1F2430;background:#fff}
+label{display:block;font-weight:700;margin-bottom:8px}
+select{font-family:inherit;font-size:15px;height:44px;padding:0 10px;border:1px solid #D5D9E0;border-radius:8px;min-width:220px}
+</style>
+</head>
+<body>
+<label for="store">這個聊天室是哪一間門市</label>
+<select id="store">
+  <option value="zhongxiao">台北忠孝旗艦</option>
+  <option value="tongyi">統一門市</option>
+  <option value="taoyuan">桃園 ATT</option>
+  <option value="yizhong">一中門市</option>
+  <option value="xinyizhong">台中新一中</option>
+  <option value="xintiandi">台南門市</option>
+  <option value="xinjuejiang">高雄門市</option>
+</select>
+<script src="teams.min.js"></script>
+<script>
+(function () {
+  var base = 'https://vvdouble-shopline.web.app/report/';
+  microsoftTeams.app.initialize().then(function () {
+    microsoftTeams.pages.config.registerOnSaveHandler(function (ev) {
+      var s = document.getElementById('store').value;
+      microsoftTeams.pages.config.setConfig({
+        suggestedDisplayName: '門市回報',
+        entityId: 'report-' + s,
+        contentUrl: base + '?store=' + s,
+        websiteUrl: base + '?store=' + s
+      }).then(function () { ev.notifySuccess(); }, function (e) { ev.notifyFailure(String(e)); });
+    });
+    microsoftTeams.pages.config.setValidityState(true);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>門市回報</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#F4F5F7;color:#1F2430;font-family:'Noto Sans TC',system-ui,sans-serif;font-size:13px;line-height:1.5}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:12px}
+h1{margin:0;font-size:18px}
+.sub{color:#5B6472}
+.card{background:#fff;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ttl{font-weight:700}
+.big{font-size:22px;font-weight:700}
+.num b{font-size:15px}
+.row{display:flex;align-items:center;gap:12px}
+.row label{flex:1 1 0;min-width:0}
+.row.money label{color:#5B6472}
+input[type=text]{font-family:inherit;height:46px;border:1px solid #D5D9E0;border-radius:8px;padding:0 12px;font-size:16px;color:#1F2430;background:#fff}
+.money input{flex:none;width:170px;text-align:right}
+.qty input{flex:none;width:64px;text-align:center;padding:0}
+#who{width:100%}
+.chip{align-self:flex-start;padding:3px 10px;border-radius:999px;background:#EEF0F3}
+.bar{padding:10px 14px;border-radius:12px;background:#FFF4D6;color:#6B4E00;font-weight:500}
+.ok{padding:12px 14px;border-radius:12px;background:#E6F4EC;color:#17633A;font-weight:500;display:none}
+button.primary{font-family:inherit;height:52px;border:0;border-radius:10px;background:#1F2430;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.file{font-family:inherit;font-size:13px}
+#thumb{max-width:160px;border-radius:8px;display:none}
+.meta{color:#5B6472;font-size:12px;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>每日回報</h1>
+    <div class="sub"><span id="storeName"></span>　<span id="today"></span></div>
+  </div>
+
+  <div class="bar">測試版：送出不會儲存</div>
+  <div class="ok" id="ok">已送出（測試，未儲存）</div>
+
+  <div class="card">
+    <label class="ttl" for="who">回報人</label>
+    <input type="text" id="who" autocomplete="off">
+  </div>
+
+  <div class="card">
+    <div class="head"><div class="ttl">總業績</div><div class="big" id="total">$0</div></div>
+    <div class="row money"><label for="cash">現金</label><input type="text" inputmode="numeric" id="cash" data-n></div>
+    <div class="row money"><label for="card">刷卡</label><input type="text" inputmode="numeric" id="card" data-n></div>
+    <div class="row money"><label for="linepay">LINE Pay</label><input type="text" inputmode="numeric" id="linepay" data-n></div>
+  </div>
+
+  <div class="card">
+    <div class="head"><div class="ttl">來客</div><div class="sub num">來客數 <b id="cust" style="color:#1F2430">0</b>　客單 <b id="avg" style="color:#1F2430">—</b></div></div>
+    <div class="row money"><label for="mem">會員</label><input type="text" inputmode="numeric" id="mem" data-n></div>
+    <div class="row money"><label for="non">非會員</label><input type="text" inputmode="numeric" id="non" data-n></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><div class="ttl">滯銷</div><div class="chip">GAGA聯名</div></div>
+    <div class="row qty"><label for="q1">流璃光院閃耀星鑽長袖透膚上衣(附背心)</label><input type="text" inputmode="numeric" id="q1" data-n></div>
+    <div class="row qty"><label for="q2">嵐山冬日極致包裹蓬鬆鋪棉連帽外套(連帽可折)</label><input type="text" inputmode="numeric" id="q2" data-n></div>
+    <div class="row qty"><label for="q3">京都新篇重磅棉料率性短袖T-shirt-一般</label><input type="text" inputmode="numeric" id="q3" data-n></div>
+    <div class="row qty"><label for="q4">細閃金平糖柔膚清透綁帶雪紡削肩上衣</label><input type="text" inputmode="numeric" id="q4" data-n></div>
+    <div class="row qty"><label for="q5">稻荷秋色蕾絲拼接挺版斜紋布襯衫</label><input type="text" inputmode="numeric" id="q5" data-n></div>
+  </div>
+
+  <div class="card">
+    <label class="ttl" for="photo">日結畫面</label>
+    <input class="file" type="file" id="photo" accept="image/*">
+    <img id="thumb" alt="已選的照片">
+  </div>
+
+  <button class="primary" id="send" type="button">送出回報</button>
+
+  <div class="meta" id="meta"></div>
+</div>
+
+<script src="teams.min.js"></script>
+<script>
+(function () {
+  var STORES = { zhongxiao: '台北忠孝旗艦', tongyi: '統一門市', taoyuan: '桃園 ATT', yizhong: '一中門市', xinyizhong: '台中新一中', xintiandi: '台南門市', xinjuejiang: '高雄門市' };
+  var $ = function (id) { return document.getElementById(id); };
+  var qs = new URLSearchParams(location.search);
+  var store = STORES[qs.get('store')] ? qs.get('store') : 'zhongxiao';
+  $('storeName').textContent = STORES[store];
+
+  var now = new Date(Date.now() + 8 * 3600000);
+  $('today').textContent = (now.getUTCMonth() + 1) + '/' + now.getUTCDate() + '（' + '日一二三四五六'.charAt(now.getUTCDay()) + '）';
+
+  var n = function (id) { return parseInt($(id).value, 10) || 0; };
+  var money = function (v) { return '$' + Math.round(v).toLocaleString('en-US'); };
+
+  // 只改數字顯示的文字，不重畫輸入框，所以打字不會跳掉
+  function recalc() {
+    var total = n('cash') + n('card') + n('linepay');
+    var cust = n('mem') + n('non');
+    $('total').textContent = money(total);
+    $('cust').textContent = String(cust);
+    $('avg').textContent = cust > 0 ? money(total / cust) : '—';
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('input[data-n]'), function (el) {
+    el.addEventListener('input', function () {
+      var clean = el.value.replace(/\D/g, '');
+      if (clean !== el.value) el.value = clean;
+      $('ok').style.display = 'none';
+      recalc();
+    });
+  });
+
+  $('photo').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    var img = $('thumb');
+    if (!f) { img.style.display = 'none'; return; }
+    img.src = URL.createObjectURL(f);
+    img.style.display = 'block';
+  });
+
+  $('send').addEventListener('click', function () {
+    $('ok').style.display = 'block';
+    window.scrollTo(0, 0);
+  });
+
+  // Teams：拿登入身分，確認「不用密碼就知道是誰」這件事成立
+  var meta = $('meta');
+  function show(lines) { meta.textContent = lines.join('　'); }
+  try {
+    if (!window.microsoftTeams) { show(['不在 Teams 內']); return; }
+    microsoftTeams.app.initialize().then(function () {
+      return microsoftTeams.app.getContext();
+    }).then(function (ctx) {
+      var u = (ctx && ctx.user) || {};
+      var host = (ctx && ctx.app && ctx.app.host) || {};
+      show(['Teams 帳號：' + (u.userPrincipalName || u.loginHint || '讀不到'), '裝置：' + (host.clientType || '?')]);
+      try { microsoftTeams.app.notifySuccess(); } catch (e) {}
+    }).catch(function () { show(['不在 Teams 內']); });
+  } catch (e) { show(['不在 Teams 內']); }
+})();
+</script>
+</body>
+</html>
