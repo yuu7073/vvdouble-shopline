@@ -286,8 +286,8 @@ async function buildOpening(ctx, store, date, tag, open) {
   const tips = [...contextTips(data, date), ...todayTips(w, date), serviceTip(st, data, date), ...coachTips(st).slice(0, 2)].slice(0, 5);
   return openingCard({ store, date, open, w, pg, last: lastDay && lastDay.sales > 0 ? lastDay : null, tips, tag });
 }
-async function postOpening(ctx, store, date, tag, open) {
-  const hook = await R.readWebhook(ctx.sheets, store, ctx.GoogleAuth);
+async function postOpening(ctx, store, date, tag, open, hookOverride) {
+  const hook = hookOverride || (await R.readWebhook(ctx.sheets, store, ctx.GoogleAuth));
   if (!hook) return { posted: false, reason: "這間門市還沒有設定聊天室通知" };
   if (open === undefined) open = openTime(store, date, await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours"));
   const card = await buildOpening(ctx, store, date, tag, open);

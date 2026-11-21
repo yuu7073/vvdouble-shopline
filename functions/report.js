@@ -298,6 +298,10 @@ async function storeDbGet(GoogleAuth, path, query) {
   return r.json();
 }
 const okUrl = (u) => (/^https:\/\//.test(String(u || "").trim()) ? String(u).trim() : "");
+// 測試卡片的去處：試算表「設定」分頁代號 test 那一列有填網址，就貼到那裡（不打擾門市聊天室）
+async function testWebhook(sheets) {
+  try { const hit = (await sheets.get("設定!A2:C")).find((r) => r[0] === "test"); return okUrl(hit && hit[2]); } catch (e) { return ""; }
+}
 async function readWebhook(sheets, store, GoogleAuth) {
   // 試算表「設定」分頁有填就以它為準，沒填才讀舊資料庫
   try {
@@ -431,7 +435,7 @@ async function handle(req, res, deps) {
       if (!isHq(user.account)) return res.status(403).json({ ok: false, error: "只有總部帳號可以發測試卡片" });
       const store = String((req.body || {}).store || "");
       if (!STORES[store]) return res.status(400).json({ ok: false, error: "門市不對" });
-      const r = await ops.postOpening({ sheets, GoogleAuth }, store, twNow().date, "測試");
+      const r = await ops.postOpening({ sheets, GoogleAuth }, store, twNow().date, "測試", undefined, await testWebhook(sheets));
       return res.json({ ok: true, ...r });
     }
 
@@ -440,7 +444,7 @@ async function handle(req, res, deps) {
       if (!isHq(user.account)) return res.status(403).json({ ok: false, error: "只有總部帳號可以發測試卡片" });
       const store = String((req.body || {}).store || "");
       if (!STORES[store]) return res.status(400).json({ ok: false, error: "門市不對" });
-      const hook = await readWebhook(sheets, store, GoogleAuth);
+      const hook = (await testWebhook(sheets)) || (await readWebhook(sheets, store, GoogleAuth));
       if (!hook) return res.json({ ok: true, posted: false, reason: "找不到這間店的通知網址" });
       const sample = { store, date: twNow().date, who: "測試", cash: 469, card: 33014, linepay: DEPT.includes(store) ? 0 : 31396, mobile: DEPT.includes(store) ? 31396 : 0, voucherE: 0, voucherG: 0, other: 0, pieces: 31, mem: 23, non: 1, total: 64879, cust: 24, avg: 2703,
         items: (await readItems(sheets)).map((it, i) => ({ ...it, qty: i % 2 })), petty: [{ amount: 120, note: "買垃圾袋", handler: "測試" }], pettySum: 120 };
