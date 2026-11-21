@@ -273,4 +273,57 @@ async function sweepOpening(db, ctx, ts = Date.now()) {
   return out;
 }
 
-module.exports = { GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
+// ---------- 一次性：把舊工具某個月的日誌搬進試算表（已有的日期＋門市不覆蓋） ----------
+const MOBILE = { linepay: "LINE Pay", jkopay: "街口", applepay: "Apple Pay", pxpay: "全支付", easywallet: "悠遊付", taiwanpay: "台灣 Pay", pi: "Pi 錢包" };
+function oldRow(store, date, l) {
+  const pay = l.payment || {};
+  const arr = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []);
+  const sum = (v) => arr(v).reduce((a, x) => a + n0(x && x.amount), 0);
+  const detail = [...arr(pay.mobile).map((x) => `${MOBILE[x.key] || x.key || "行動支付"} ${R.num(n0(x.amount))}`), ...arr(pay.other).map((x) => `${x.customName || x.key || "其他"} ${R.num(n0(x.amount))}`)].join("、");
+  const petty = arr(l.pettyCash);
+  const cc = l.cashClose || {};
+  const cust = n0(l.customers) || n0(l.memberCount) + n0(l.nonMemberCount);
+  const ts = l._firstSubmittedAt || l._lastModified;
+  const w = l.weather || {};
+  const wt = [w.text, w.tempMin !== undefined && w.tempMax !== undefined ? `${Math.round(w.tempMin)}–${Math.round(w.tempMax)}°C` : "", l.weatherSupp].filter(Boolean).join(" ");
+  const supp = [["人潮", l.crowdSupp], ["客群", l.customerSupp], ["熱銷", l.hotSupp], ["商品", l.stockSupp], ["試穿", l.trySupp]].filter(([, v]) => v).map(([k, v]) => `${k}：${v}`).join("；");
+  const blank = (v) => (v === null || v === undefined || v === "" ? "" : n0(v));
+  return [date, R.STORES[store], l._firstSubmittedBy || l._modifiedBy || "", n0(l.sales), n0(pay.cash), n0(pay.card), n0(pay.linePay), cust, n0(l.memberCount), n0(l.nonMemberCount),
+    cust > 0 ? Math.round(n0(l.sales) / cust) : 0, "", "", ts ? R.twNow(ts).stamp : "", l.submitted ? "舊工具匯入" : "舊工具匯入（未送出）",
+    petty.reduce((a, x) => a + n0(x && x.amount), 0), petty.map((x) => `${R.num(n0(x.amount))}　${x.note || ""}　${x.handler || ""}`).join("\n"),
+    n0(l.items), n0(pay.voucherE), n0(pay.voucherG), sum(pay.mobile), sum(pay.other), detail,
+    0, "", blank(cc.actual), blank(cc.diff), wt, R.OPTS.crowd[l.crowd] || "", R.OPTS.customer[l.customerType] || "",
+    arr(l.hotCategories).map((h) => R.OPTS.hot[h]).filter(Boolean).join("、"), R.OPTS.stock[l.stockStatus] || "", R.OPTS.tryc[l.tryConversion] || "", supp, l.specialNote || ""];
+}
+async function importOld(ctx, ym) {
+  const ids = Object.keys(R.STORES);
+  const have = new Set((await ctx.sheets.get("回報!A2:B")).map((r) => `${R.cellDate(r[0])}|${String(r[1] || "").trim()}`));
+  const [logs, tg, mt] = await Promise.all([
+    Promise.all(ids.map((s) => R.storeDbGet(ctx.GoogleAuth, `/stores/${s}/dailyLogs`, `orderBy=%22%24key%22&startAt=%22${ym}-01%22&endAt=%22${ym}-31%22`))),
+    Promise.all(ids.map((s) => R.storeDbGet(ctx.GoogleAuth, `/stores/${s}/targets/${ym}`))),
+    R.storeDbGet(ctx.GoogleAuth, `/global/monthlyTargets/${ym}`),
+  ]);
+  const rows = [];
+  ids.forEach((s, i) => Object.entries(logs[i] || {}).forEach(([d, l]) => {
+    if (!l || typeof l !== "object" || !(n0(l.sales) > 0) || have.has(`${d}|${R.STORES[s]}`)) return;
+    rows.push(oldRow(s, d, l));
+  }));
+  rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : ids.findIndex((s) => R.STORES[s] === a[1]) - ids.findIndex((s) => R.STORES[s] === b[1])));
+  if (rows.length) await ctx.sheets.appendRows(`回報!A:${R.LAST_COL}`, rows);
+  // 目標另外存一個分頁（每日目標＋月目標），之後不靠舊資料庫也查得到
+  const trows = [["日期", "門市代號", "門市", "每日目標", "月目標"]];
+  ids.forEach((s, i) => Object.entries(tg[i] || {}).sort().forEach(([d, v]) => { if (/^\d{4}-\d{2}-\d{2}$/.test(d)) trows.push([d, s, R.STORES[s], n0(v), n0(mt && mt[s])]); }));
+  await ctx.sheets.put(`目標!A1:E${trows.length}`, trows);
+  return { added: rows.length, targets: trows.length - 1 };
+}
+// 把某間店某天的開店提醒內容寫成文字放到「開店提醒預覽」分頁（不貼聊天室）
+async function previewOpening(ctx, store, date) {
+  const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
+  const card = await buildOpening(ctx, store, date, "", openTime(store, date, hours));
+  const lines = [];
+  card.attachments[0].content.body.forEach((b) => { if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
+  await ctx.sheets.put(`開店提醒預覽!A1:A${lines.length + 1}`, [[`產生時間 ${R.twNow().stamp}`], ...lines.map((x) => [x])]);
+  return lines.length;
+}
+
+module.exports = { oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };

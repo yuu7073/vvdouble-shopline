@@ -826,6 +826,19 @@ exports.reportOpening = onSchedule(
   }
 );
 
+// 一次性：把舊工具 11 月日誌搬進試算表，並產生 11/22 忠孝開店提醒預覽（跑完這段會移除）
+exports.reportImportOnce = onSchedule(
+  { schedule: "*/10 4-6 22 11 *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 300, memory: "512MiB" },
+  async () => {
+    const ops = require("./ops");
+    const ctx = { sheets: report.sheetsApi(GoogleAuth), GoogleAuth };
+    try { console.log("report import:", JSON.stringify(await ops.importOld(ctx, "2026-11"))); }
+    catch (e) { console.error("report import", e); await ctx.sheets.put("開店提醒預覽!C1:C2", [["匯入失敗"], [String(e.message || e).slice(0, 300)]]); }
+    try { await ops.previewOpening({ sheets: ctx.sheets, GoogleAuth }, "zhongxiao", "2026-11-22"); }
+    catch (e) { console.error("report preview", e); await ctx.sheets.put("開店提醒預覽!D1:D2", [["預覽失敗"], [String(e.message || e).slice(0, 300)]]); }
+  }
+);
+
 const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
 const EMBED_MARK = "vv-reel-embed";
 

@@ -271,6 +271,8 @@ function sheetsApi(GoogleAuth) {
   return {
     get: (range) => call(`/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`).then((d) => d.values || []),
     update: (range, row) => call(`/values/${encodeURIComponent(range)}?valueInputOption=RAW`, { method: "PUT", data: { values: [row] } }),
+    put: (range, rows) => call(`/values/${encodeURIComponent(range)}?valueInputOption=RAW`, { method: "PUT", data: { values: rows } }),
+    appendRows: (range, rows) => call(`/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: "POST", data: { values: rows } }),
     append: (range, row) => call(`/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: "POST", data: { values: [row] } }),
   };
 }
