@@ -22,7 +22,7 @@ const STORES = {
   xinjuejiang: "高雄門市",
 };
 
-const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "送出時間", "Teams 帳號"];
+const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "送出時間", "Teams 帳號", "零用金小計", "零用金明細"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const money = (n) => "$" + Math.round(n).toLocaleString("en-US");
 const num = (n) => Math.round(n).toLocaleString("en-US");
@@ -104,6 +104,18 @@ function validate(b, today) {
     if (!name) return;
     if (Number.isNaN(qty)) errs.push("滯銷數量不對"); else items.push({ series, name, qty });
   });
+  // 零用金：每筆要有金額、用途、經手人；整列空白的略過
+  const petty = [];
+  (Array.isArray(b.petty) ? b.petty : []).slice(0, 30).forEach((it) => {
+    const raw = it && it.amount;
+    const note = String((it && it.note) || "").trim().slice(0, 60);
+    const handler = String((it && it.handler) || "").trim().slice(0, 30);
+    const blank = (raw === "" || raw === null || raw === undefined || Number(raw) === 0) && !note && !handler;
+    if (blank) return;
+    const amount = int(raw, 1000000);
+    if (Number.isNaN(amount) || amount <= 0 || !note || !handler) errs.push("零用金每筆要填金額、用途、經手人");
+    else petty.push({ amount, note, handler });
+  });
   const photo = String(b.photo || "");
   const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(photo);
   if (!m) errs.push("請附日結畫面照片");
@@ -112,7 +124,7 @@ function validate(b, today) {
   const total = f.cash + f.card + f.linepay;
   const cust = f.mem + f.non;
   return {
-    data: { store, date, who, ...f, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items },
+    data: { store, date, who, ...f, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items, petty, pettySum: petty.reduce((a, p) => a + p.amount, 0) },
     photoB64: m[1],
   };
 }
@@ -121,8 +133,11 @@ function itemsText(items) {
   return items.map((i) => `${i.series ? `《${i.series}》` : ""}${i.name}*${i.qty}`).join("\n");
 }
 // 以單引號開頭的話試算表會吃掉；回報人、帳號這類文字欄一律當純文字寫入（RAW），不會被當公式執行
+function pettyText(petty) {
+  return (petty || []).map((p) => `${num(p.amount)}　${p.note}　${p.handler}`).join("\n");
+}
 function buildRow(d, photoUrl, stamp, account) {
-  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account];
+  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account, d.pettySum || 0, pettyText(d.petty)];
 }
 
 function buildCard(d, photoUrl) {
@@ -139,6 +154,10 @@ function buildCard(d, photoUrl) {
   if (d.items.length) {
     body.push({ type: "TextBlock", text: "滯銷", weight: "Bolder", spacing: "Medium" });
     body.push({ type: "TextBlock", text: d.items.map((i) => `${i.series ? `《${i.series}》` : ""}${i.name} *${i.qty}`).join("\n\n"), wrap: true, spacing: "Small" });
+  }
+  if (d.petty && d.petty.length) {
+    body.push({ type: "TextBlock", text: `零用金　${money(d.pettySum)}`, weight: "Bolder", spacing: "Medium" });
+    body.push({ type: "TextBlock", text: d.petty.map((p) => `${money(p.amount)}　${p.note}（${p.handler}）`).join("\n\n"), wrap: true, spacing: "Small" });
   }
   if (photoUrl) body.push({ type: "Image", url: photoUrl, size: "Large", spacing: "Medium", altText: "日結畫面" });
   return {
@@ -169,8 +188,8 @@ function sheetsApi(GoogleAuth) {
 async function upsertRow(sheets, row) {
   const keys = await sheets.get("回報!A2:B");
   const idx = keys.findIndex((r) => r[0] === row[0] && r[1] === row[1]);
-  if (idx >= 0) { await sheets.update(`回報!A${idx + 2}:O${idx + 2}`, row); return "updated"; }
-  await sheets.append("回報!A:O", row);
+  if (idx >= 0) { await sheets.update(`回報!A${idx + 2}:Q${idx + 2}`, row); return "updated"; }
+  await sheets.append("回報!A:Q", row);
   return "added";
 }
 async function readItems(sheets) {
@@ -305,6 +324,6 @@ async function handle(req, res, deps) {
 
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
-  twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText,
+  twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
   upsertRow, readItems, readWebhook, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };
