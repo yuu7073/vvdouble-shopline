@@ -264,9 +264,7 @@ function openingCard(o) {
   const facts = [];
   if (w) facts.push({ title: "天氣", value: `${w.text}　${w.tmin}–${w.tmax}°C${w.pop !== null ? `　降雨機率 ${w.pop}%` : ""}` });
   if (pg.todayTarget) facts.push({ title: "今日目標", value: R.money(pg.todayTarget) });
-  if (pg.monthTarget) { if (pg.needPerDay !== null) facts.push({ title: "剩餘每日需", value: `${R.money(pg.needPerDay)}（剩 ${pg.daysLeft} 天）` }); }
-  else if (pg.cum) facts.push({ title: "本月累計", value: R.money(pg.cum) });
-  if (last) facts.push({ title: "上週同日", value: `${R.money(last.sales)}　來客 ${last.customers}` });
+  if (!pg.monthTarget && pg.cum) facts.push({ title: "本月累計", value: R.money(pg.cum) });
   const body = [
     { type: "TextBlock", text: `${R.STORES[store]}　開店提醒${tag ? `（${tag}）` : ""}`, weight: "Bolder", size: "Medium", wrap: true },
     { type: "TextBlock", text: `${R.shortDate(date)}${open ? `　${open} 開門` : ""}`, isSubtle: true, spacing: "None", wrap: true },
