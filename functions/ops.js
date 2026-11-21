@@ -231,31 +231,56 @@ function serviceTip(st, data, date) {
   const pick = SERVICE[Math.floor(Date.UTC(y, m - 1, d) / 86400000) % SERVICE.length];
   return { label: pick[0], text: pick[1] };
 }
-// 進度條：用兩格不同底色的欄位拼出來（Teams 卡片沒有內建進度條）
-function barRow(label, pct, style) {
-  const p = Math.max(1, Math.min(99, Math.round(pct)));
-  const cell = (width, st) => ({ type: "Column", width, style: st, minHeight: "10px", items: [{ type: "TextBlock", text: " ", size: "Small", spacing: "None" }] });
-  return [
-    { type: "TextBlock", text: label, wrap: true, spacing: "Small", size: "Small" },
-    { type: "ColumnSet", spacing: "None", columns: pct >= 99.5 ? [cell(100, style)] : [cell(p, style), cell(100 - p, "emphasis")] },
-  ];
+// 進度條：後端畫成一張 PNG（Teams 卡片沒有內建進度條，用底色欄位拼的很醜）。
+// 圖只帶百分比，不含門市名稱與金額。fill＝業績進度，mark＝應有進度的直線，ok＝超前(綠)／落後(紅)
+function barPng(fill, mark, ok) {
+  const zlib = require("zlib");
+  const W = 880, H = 36, r = H / 2;
+  const f = Math.max(0, Math.min(100, Number(fill) || 0)) / 100 * W;
+  const m = mark === null || mark === undefined || mark === "" ? null : Math.max(0, Math.min(100, Number(mark) || 0)) / 100 * W;
+  const col = ok ? [46, 158, 91] : [217, 83, 79];
+  const raw = Buffer.alloc((W * 4 + 1) * H);
+  // 圓角膠囊的覆蓋率（邊緣做 1px 柔邊）
+  const cover = (x, y, x1) => {
+    if (x1 <= 0) return 0;
+    const cx = Math.max(r, Math.min(Math.max(r, x1 - r), x)), dx = x - cx, dy = y - r;
+    const edge = x1 < 2 * r ? Math.min(r - Math.hypot(Math.min(0, x - r), dy), x1 - x) : r - Math.hypot(dx, dy);
+    return Math.max(0, Math.min(1, edge + 0.5));
+  };
+  for (let y = 0; y < H; y++) {
+    const o = y * (W * 4 + 1);
+    for (let x = 0; x < W; x++) {
+      const px = x + 0.5, py = y + 0.5, t = cover(px, py, W), c = Math.min(t, cover(px, py, f));
+      // 軌道：半透明灰，深色淺色背景都看得到
+      let R_ = 138, G_ = 143, B_ = 152, A = t * 0.38;
+      if (c > 0) { const a = c + A * (1 - c); R_ = (col[0] * c + R_ * A * (1 - c)) / a; G_ = (col[1] * c + G_ * A * (1 - c)) / a; B_ = (col[2] * c + B_ * A * (1 - c)) / a; A = a; }
+      if (m !== null && Math.abs(px - Math.max(3, Math.min(W - 3, m))) <= 3) { R_ = 255; G_ = 255; B_ = 255; A = 1; if (Math.abs(px - Math.max(3, Math.min(W - 3, m))) > 1.5) { R_ = 31; G_ = 36; B_ = 48; } }
+      const k = o + 1 + x * 4;
+      raw[k] = Math.round(R_); raw[k + 1] = Math.round(G_); raw[k + 2] = Math.round(B_); raw[k + 3] = Math.round(A * 255);
+    }
+  }
+  const tbl = barPng.t || (barPng.t = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
+  const crc = (b) => { let c = 0xffffffff; for (const v of b) c = tbl[(c ^ v) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const cr = Buffer.alloc(4); cr.writeUInt32BE(crc(td)); return Buffer.concat([len, td, cr]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]);
 }
+const BAR_URL = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/report?op=bar";
 function progressBars(pg, date) {
   if (!pg.monthTarget) return [];
   const head = { type: "TextBlock", text: "本月進度", weight: "Bolder", spacing: "Medium" };
-  const note = (text) => ({ type: "TextBlock", wrap: true, spacing: "Small", size: "Small", isSubtle: true, text });
-  const sales = `業績 ${pg.rate}%　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`;
-  // 有每日目標：第二條畫「照每日目標到昨天應該累計多少」；沒有才用過了幾天來比
-  if (pg.paceTarget) {
-    const due = Math.round((pg.paceTarget / pg.monthTarget) * 1000) / 10;
-    const gap = pg.cum - pg.paceTarget;
-    return [head, ...barRow(sales, pg.rate, gap >= 0 ? "good" : "attention"), ...barRow(`應有 ${due}%　照每日目標應累計 ${R.money(pg.paceTarget)}`, due, "accent"),
-      note(gap >= 0 ? `超前 ${R.money(gap)}` : `落後 ${R.money(-gap)}`)];
-  }
-  const total = monthDays(date.slice(0, 7));
-  const passed = Number(date.slice(8)) - 1;
-  const timePct = Math.round((passed / total) * 1000) / 10;
-  return [head, ...barRow(sales, pg.rate, pg.rate >= timePct ? "good" : "attention"), ...barRow(`時間 ${timePct}%　已過 ${passed} 天 / ${total} 天`, timePct, "accent")];
+  const line = (text, subtle) => ({ type: "TextBlock", wrap: true, spacing: "Small", size: subtle ? "Small" : "Default", isSubtle: !!subtle, text });
+  const img = (fill, mark, ok, alt) => ({ type: "Image", url: `${BAR_URL}&f=${fill}${mark === null ? "" : `&m=${mark}`}&ok=${ok ? 1 : 0}`, altText: alt, size: "Stretch", spacing: "Small" });
+  const sales = `業績 **${pg.rate}%**　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`;
+  // 有每日目標：直線標出「照每日目標到昨天應該到哪裡」；沒有才用過了幾天來比
+  let due, label;
+  if (pg.paceTarget) { due = Math.round((pg.paceTarget / pg.monthTarget) * 1000) / 10; label = `直線是應有進度 ${due}%（照每日目標應累計 ${R.money(pg.paceTarget)}）`; }
+  else { const total = monthDays(date.slice(0, 7)), passed = Number(date.slice(8)) - 1; due = Math.round((passed / total) * 1000) / 10; label = `直線是時間進度 ${due}%（已過 ${passed} 天 / ${total} 天）`; }
+  const gap = pg.paceTarget ? pg.cum - pg.paceTarget : null;
+  const ok = gap === null ? pg.rate >= due : gap >= 0;
+  const out = [head, line(sales), img(pg.rate, due, ok, `業績進度 ${pg.rate}%，應有 ${due}%`), line(label, true)];
+  if (gap !== null) out.push({ type: "TextBlock", wrap: true, spacing: "Small", weight: "Bolder", color: ok ? "Good" : "Attention", text: ok ? `超前 ${R.money(gap)}` : `落後 ${R.money(-gap)}` });
+  return out;
 }
 
 // ---------- 開店提醒卡片 ----------
@@ -370,9 +395,9 @@ async function previewOpening(ctx, store, date) {
   const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
   const card = await buildOpening(ctx, store, date, "", openTime(store, date, hours));
   const lines = [];
-  card.attachments[0].content.body.forEach((b) => { if (b.type === "ColumnSet") return; if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
+  card.attachments[0].content.body.forEach((b) => { if (b.type === "Image") return; if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
   await ctx.sheets.put(`開店提醒預覽!A1:A${lines.length + 1}`, [[`產生時間 ${R.twNow().stamp}`], ...lines.map((x) => [x])]);
   return lines.length;
 }
 
-module.exports = { contextTips, serviceTip, progressBars, oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
+module.exports = { barPng, contextTips, serviceTip, progressBars, oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
