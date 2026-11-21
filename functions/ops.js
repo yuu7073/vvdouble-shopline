@@ -183,7 +183,7 @@ function coachTips(st) {
   }
   const lowTry = c(st.try, "low") + c(st.try, "rare");
   if (lowTry >= 3) add(2, "近期試穿轉換偏低", `近 7 天有 ${lowTry} 天試穿轉換不理想，試衣間的客人是今天重點：問出猶豫點，主動給尺寸或版型替代`);
-  if (c(st.stock, "hot-out") >= 2) add(1, "熱門商品常斷貨", `近 7 天有 ${c(st.stock, "hot-out")} 天熱門商品斷貨，今天記得跟總部追補貨，先準備替代款的推薦說法`);
+  if (c(st.stock, "hot-out") >= 2) add(1, "熱門商品常斷貨", `近 7 天有 ${c(st.stock, "hot-out")} 天熱門商品斷貨，今天先準備好替代款的推薦說法，客人問到缺貨款時馬上接得上`);
   if (c(st.stock, "new") >= 2) add(4, "近期新品到貨多", `近 7 天有 ${c(st.stock, "new")} 天新品到貨，主動介紹給回頭客，用穿搭組合帶新品`);
   const rainy = c(st.weather, "rainy") + c(st.weather, "storm");
   const low = st.avgRate !== null && st.avgRate < 90;

@@ -180,6 +180,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
 
   <div class="meta" id="meta"></div>
   <div id="hqBox" style="display:none;flex-wrap:wrap;gap:8px">
+    <select id="testStore" aria-label="測試用門市" style="font-family:inherit;font-size:13px;height:40px;border:1px solid #D5D9E0;border-radius:8px;padding:0 8px;background:#fff;color:#1F2430"></select>
     <button class="ghost" id="testCard" type="button">發測試回報卡片</button>
     <button class="ghost" id="testOpen" type="button">發測試開店提醒</button>
   </div>
@@ -204,7 +205,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     Array.prototype.forEach.call(document.querySelectorAll('[data-dept]'), function (el) { el.style.display = dept ? 'flex' : 'none'; if (!dept) el.querySelector('input').value = ''; });
     Array.prototype.forEach.call(document.querySelectorAll('[data-street]'), function (el) { el.style.display = dept ? 'none' : 'flex'; if (dept) el.querySelector('input').value = ''; });
   }
-  var VER = 'v1.7';
+  var VER = 'v1.8';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -423,7 +424,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
       if (busy) return;
       busy = true; $(btn).disabled = true;
       token().then(function (t) {
-        return fetch(API + '?op=' + op, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ store: store }) });
+        return fetch(API + '?op=' + op, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ store: $('testStore').value || store }) });
       }).then(function (r) { return r.json(); }).then(function (j) {
         if (!j.ok) throw new Error(j.error || '失敗');
         $('meta').textContent = VER + '　' + label + '：' + (j.posted ? '已貼出' : '未貼出（' + (j.reason || j.status || '') + '）');
@@ -431,6 +432,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
         .then(function () { busy = false; $(btn).disabled = false; });
     });
   }
+  Object.keys(STORES).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = STORES[k]; if (k === store) o.selected = true; $('testStore').appendChild(o); });
   hqTest('testCard', 'testcard', '測試回報卡片');
   hqTest('testOpen', 'testopen', '測試開店提醒');
 
