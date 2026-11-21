@@ -130,6 +130,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
   var items = [];
   var photoData = '';
   var busy = false;
+  var VER = 'v1.3';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -266,19 +267,25 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
     $('storeName').textContent = STORES[store];
     $('date').value = today(); $('date').max = today();
     if (!window.microsoftTeams) { show('err', '請從 Teams 的「門市回報」分頁開啟'); return; }
-    microsoftTeams.app.initialize().then(function () {
+    var stage = '啟動';
+    var withTimeout = function (pr, ms) { return Promise.race([pr, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('逾時')); }, ms); })]); };
+    withTimeout(microsoftTeams.app.initialize(), 15000).then(function () {
       try { microsoftTeams.app.notifySuccess(); } catch (e) {}
-      return token();
+      stage = '身分驗證';
+      return withTimeout(token(), 20000);
     }).then(function (t) {
+      stage = '連線';
       return fetch(API + '?op=config', { headers: { Authorization: 'Bearer ' + t } });
-    }).then(function (r) { return r.json(); }).then(function (j) {
+    }).then(function (r) { stage = '讀取設定'; return r.json(); }).then(function (j) {
       if (!j.ok) throw new Error(j.error || '載入失敗');
       renderItems(j.items);
-      $('meta').textContent = (j.account || '') + '　v1.2';
+      $('meta').textContent = (j.account || '') + '　' + VER;
       show(null);
       $('form').style.display = 'flex';
     }).catch(function (e) {
-      show('err', (e && e.message && /[一-鿿]/.test(e.message)) ? e.message : '請從 Teams 的「門市回報」分頁開啟');
+      var raw = String((e && (e.message || e.errorCode)) || e || '');
+      show('err', stage + '沒有成功，請關掉分頁重新開啟');
+      $('meta').textContent = VER + '　' + stage + '：' + raw.slice(0, 160);
     });
   }
   start();
