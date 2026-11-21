@@ -246,16 +246,24 @@ function digestText(date, rows) {
   const done = rows.filter((r) => r[0] === date);
   const names = Object.values(STORES);
   const missing = names.filter((n) => !done.some((r) => r[1] === n));
+  const n = (v) => Number(v) || 0;
+  const block = (title, total, cust, mem, non) => [
+    title,
+    `總業績 ${money(total)}`,
+    `來客 ${num(cust)}（會員 ${num(mem)} / 非會員 ${num(non)}）`,
+    `平均客單 ${cust > 0 ? money(total / cust) : "—"}`,
+  ];
   const lines = [`每日回報｜${shortDate(date)}`, `已回報 ${done.length} / ${names.length}`];
-  let sum = 0;
-  done.forEach((r) => {
-    const total = Number(r[3]) || 0, cust = Number(r[7]) || 0;
-    sum += total;
-    lines.push("", `${r[1]}　${r[2] || ""}`.trim(), `業績 ${money(total)}　來客 ${num(cust)}　客單 ${cust > 0 ? money(Number(r[10]) || 0) : "—"}`);
-    lines.push(`現金 ${num(Number(r[4]) || 0)} / 刷卡 ${num(Number(r[5]) || 0)} / LINE Pay ${num(Number(r[6]) || 0)}`);
-  });
-  if (done.length) lines.push("", `合計 ${money(sum)}`);
-  if (missing.length) lines.push("", "未回報", missing.join("、"));
+  if (done.length) {
+    const sum = done.reduce((a, r) => ({ total: a.total + n(r[3]), cust: a.cust + n(r[7]), mem: a.mem + n(r[8]), non: a.non + n(r[9]) }), { total: 0, cust: 0, mem: 0, non: 0 });
+    lines.push("", ...block("【合計】", sum.total, sum.cust, sum.mem, sum.non));
+    // 照門市固定順序排，不是照送出先後
+    names.forEach((name) => {
+      const r = done.find((x) => x[1] === name);
+      if (r) lines.push("", ...block(`【${name}】`, n(r[3]), n(r[7]), n(r[8]), n(r[9])));
+    });
+  }
+  if (missing.length) lines.push("", "【未回報】", missing.join("、"));
   return lines.join("\n");
 }
 async function lineOwner(db) {
