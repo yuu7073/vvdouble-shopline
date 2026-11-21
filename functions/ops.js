@@ -268,7 +268,7 @@ function barPng(fill, mark, ok) {
 const BAR_URL = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/report?op=bar";
 function progressBars(pg, date) {
   if (!pg.monthTarget) return [];
-  const head = { type: "TextBlock", text: "本月進度", weight: "Bolder", spacing: "Medium" };
+  const head = heading("本月進度 📊");
   const line = (text, subtle) => ({ type: "TextBlock", wrap: true, spacing: "Small", size: subtle ? "Small" : "Default", isSubtle: !!subtle, text });
   const img = (fill, mark, ok, alt) => ({ type: "Image", url: `${BAR_URL}&f=${fill}${mark === null ? "" : `&m=${mark}`}&ok=${ok ? 1 : 0}`, altText: alt, size: "Stretch", spacing: "Small" });
   const sales = `業績 **${pg.rate}%**　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`;
@@ -279,26 +279,42 @@ function progressBars(pg, date) {
   const gap = pg.paceTarget ? pg.cum - pg.paceTarget : null;
   const ok = gap === null ? pg.rate >= due : gap >= 0;
   const out = [head, line(sales), img(pg.rate, due, ok, `業績進度 ${pg.rate}%，應有 ${due}%`), line(label, true)];
-  if (gap !== null) out.push({ type: "TextBlock", wrap: true, spacing: "Small", weight: "Bolder", color: ok ? "Good" : "Attention", text: ok ? `超前 ${R.money(gap)}` : `落後 ${R.money(-gap)}` });
+  if (gap !== null) out.push({ type: "TextBlock", wrap: true, spacing: "Small", weight: "Bolder", color: ok ? "Good" : "Attention", text: ok ? `超前 ${R.money(gap)} 🎉 繼續保持` : `落後 ${R.money(-gap)}，今天追回來 💪` });
   return out;
 }
+
+// 讓卡片活潑一點：標題配表情符號，每則建議後面接一個每天輪替的顏文字
+const EMOJI = {
+  "今天有雨": "☔", "今天偏冷": "🧣", "今天偏熱": "☀️", "早晚溫差大": "🌤️", "週末人潮": "🔥", "新品上架隔天": "✨", "週末結束後整理": "🧹",
+  "試衣間對話": "💬", "先備好替代款": "👗", "多帶一件進試衣間": "🛍️", "結帳前多問一句": "💡", "主動報尺寸": "📏",
+  "近期表現超標": "🏆", "近期穩定達標": "✅", "近期接近達標": "💪", "近期落後": "🚀", "近期業績明顯落後": "⚡",
+  "近期客單偏低": "💰", "近期客單亮眼": "💎", "近期客單穩定": "💰", "近期客件數偏低": "🛍️", "客件數可以加強": "🛍️", "搭配能力出色": "🌟",
+  "近期試穿轉換偏低": "👗", "熱門商品常斷貨": "📦", "近期新品到貨多": "✨", "雨天多影響業績": "☔", "近期人潮偏少": "🚶", "人潮多但業績沒跟上": "⚡", "近期熱銷": "🔥", "維持節奏": "🌈",
+};
+const KAO = ["(ง •̀_•́)ง", "٩(ˊᗜˋ*)و", "(๑•̀ㅂ•́)و✧", "(*ˊᗜˋ*)/", "ᕦ(ò_óˇ)ᕤ", "(｡•̀ᴗ-)✧", "ヾ(＾∇＾)", "(≧▽≦)/", "(＾▽＾)b", "✧٩(ˊωˋ*)و✧"];
+const HELLO = ["今天也一起加油", "開門囉，今天也要漂亮收班", "新的一天，衝一波", "準備好了嗎，開工", "今天的目標一起拿下", "笑著開門，笑著結帳", "今天也要讓客人美美地走出去"];
+const WX = { sunny: "☀️", cloudy: "⛅", rainy: "🌧️", storm: "⛈️" };
+const dayNo = (date) => { const [y, m, d] = date.split("-").map(Number); return Math.floor(Date.UTC(y, m - 1, d) / 86400000); };
+// 黃底粗體的段落標題
+const heading = (text, first) => ({ type: "Container", style: "warning", bleed: false, spacing: first ? "None" : "Medium", items: [{ type: "TextBlock", text, weight: "Bolder", wrap: true, size: first ? "Medium" : "Default" }] });
 
 // ---------- 開店提醒卡片 ----------
 function openingCard(o) {
   const { store, date, open, w, pg, last, tips, tag } = o;
   const facts = [];
-  if (w) facts.push({ title: "天氣", value: `${w.text}　${w.tmin}–${w.tmax}°C${w.pop !== null ? `　降雨機率 ${w.pop}%` : ""}` });
-  if (pg.todayTarget) facts.push({ title: "今日目標", value: R.money(pg.todayTarget) });
+  if (w) facts.push({ title: "天氣", value: `${WX[w.key] || ""} ${w.text}　${w.tmin}–${w.tmax}°C${w.pop !== null ? `　降雨機率 ${w.pop}%` : ""}` });
+  if (pg.todayTarget) facts.push({ title: "今日目標", value: `🎯 ${R.money(pg.todayTarget)}` });
   if (!pg.monthTarget && pg.cum) facts.push({ title: "本月累計", value: R.money(pg.cum) });
+  const n = dayNo(date);
   const body = [
-    { type: "TextBlock", text: `${R.STORES[store]}　開店提醒${tag ? `（${tag}）` : ""}`, weight: "Bolder", size: "Medium", wrap: true },
-    { type: "TextBlock", text: `${R.shortDate(date)}${open ? `　${open} 開門` : ""}`, isSubtle: true, spacing: "None", wrap: true },
+    heading(`${R.STORES[store]}　開店提醒${tag ? `（${tag}）` : ""}`, true),
+    { type: "TextBlock", text: `${R.shortDate(date)}${open ? `　${open} 開門` : ""}　${HELLO[n % HELLO.length]} ${KAO[n % KAO.length]}`, spacing: "Small", wrap: true },
   ];
   if (facts.length) body.push({ type: "FactSet", facts });
   body.push(...progressBars(pg, date));
   if (tips.length) {
-    body.push({ type: "TextBlock", text: "今日建議", weight: "Bolder", spacing: "Medium" });
-    tips.forEach((t) => body.push({ type: "TextBlock", text: `**${t.label}**　${t.text}`, wrap: true, spacing: "Small" }));
+    body.push(heading("今日建議 📝"));
+    tips.forEach((t, k) => body.push({ type: "TextBlock", text: `${EMOJI[t.label] || "👉"} **${t.label}**　${t.text} ${KAO[(n + k + 1) % KAO.length]}`, wrap: true, spacing: k ? "Small" : "Medium" }));
   }
   return { type: "message", attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4", body } }] };
 }
@@ -395,7 +411,7 @@ async function previewOpening(ctx, store, date) {
   const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
   const card = await buildOpening(ctx, store, date, "", openTime(store, date, hours));
   const lines = [];
-  card.attachments[0].content.body.forEach((b) => { if (b.type === "Image") return; if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
+  card.attachments[0].content.body.forEach((b0) => { let b = b0; if (b.type === "Image") return; if (b.items) b = b.items[0]; if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
   await ctx.sheets.put(`開店提醒預覽!A1:A${lines.length + 1}`, [[`產生時間 ${R.twNow().stamp}`], ...lines.map((x) => [x])]);
   return lines.length;
 }
