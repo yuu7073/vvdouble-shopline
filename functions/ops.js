@@ -242,18 +242,20 @@ function barRow(label, pct, style) {
 }
 function progressBars(pg, date) {
   if (!pg.monthTarget) return [];
+  const head = { type: "TextBlock", text: "本月進度", weight: "Bolder", spacing: "Medium" };
+  const note = (text) => ({ type: "TextBlock", wrap: true, spacing: "Small", size: "Small", isSubtle: true, text });
+  const sales = `業績 ${pg.rate}%　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`;
+  // 有每日目標：第二條畫「照每日目標到昨天應該累計多少」；沒有才用過了幾天來比
+  if (pg.paceTarget) {
+    const due = Math.round((pg.paceTarget / pg.monthTarget) * 1000) / 10;
+    const gap = pg.cum - pg.paceTarget;
+    return [head, ...barRow(sales, pg.rate, gap >= 0 ? "good" : "attention"), ...barRow(`應有 ${due}%　照每日目標應累計 ${R.money(pg.paceTarget)}`, due, "accent"),
+      note(gap >= 0 ? `超前 ${R.money(gap)}` : `落後 ${R.money(-gap)}`)];
+  }
   const total = monthDays(date.slice(0, 7));
   const passed = Number(date.slice(8)) - 1;
   const timePct = Math.round((passed / total) * 1000) / 10;
-  const ahead = pg.rate >= timePct;
-  const gapDay = pg.paceTarget ? pg.cum - pg.paceTarget : null;
-  const out = [
-    { type: "TextBlock", text: "本月進度", weight: "Bolder", spacing: "Medium" },
-    ...barRow(`業績 ${pg.rate}%　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`, pg.rate, ahead ? "good" : "attention"),
-    ...barRow(`時間 ${timePct}%　已過 ${passed} 天 / ${total} 天`, timePct, "accent"),
-  ];
-  out.push({ type: "TextBlock", wrap: true, spacing: "Small", size: "Small", isSubtle: true, text: `${ahead ? "業績走在時間前面" : "業績落後時間進度"}${gapDay === null ? "" : `，比已過天數的目標${gapDay >= 0 ? "多" : "少"} ${R.money(Math.abs(gapDay))}`}` });
-  return out;
+  return [head, ...barRow(sales, pg.rate, pg.rate >= timePct ? "good" : "attention"), ...barRow(`時間 ${timePct}%　已過 ${passed} 天 / ${total} 天`, timePct, "accent")];
 }
 
 // ---------- 開店提醒卡片 ----------
