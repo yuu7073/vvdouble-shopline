@@ -117,6 +117,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
   </div>
 
   <div class="meta" id="meta"></div>
+  <button class="ghost" id="testCard" type="button" style="display:none">發測試卡片到這間店的聊天室</button>
 </div>
 
 <script src="teams.min.js"></script>
@@ -130,7 +131,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
   var items = [];
   var photoData = '';
   var busy = false;
-  var VER = 'v1.4';
+  var VER = 'v1.5';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -263,6 +264,19 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       .then(function () { busy = false; $('send').disabled = false; $('send').textContent = '送出回報'; window.scrollTo(0, 0); });
   });
 
+  // 總部帳號才看得到：發一張測試卡片（不寫試算表）
+  $('testCard').addEventListener('click', function () {
+    if (busy) return;
+    busy = true; $('testCard').disabled = true;
+    token().then(function (t) {
+      return fetch(API + '?op=testcard', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ store: store }) });
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) throw new Error(j.error || '失敗');
+      $('meta').textContent = VER + '　測試卡片：' + (j.posted ? '已貼出' : '未貼出（' + (j.reason || j.status || '') + '）');
+    }).catch(function (e) { $('meta').textContent = VER + '　測試卡片：失敗 ' + String((e && e.message) || e).slice(0, 120); })
+      .then(function () { busy = false; $('testCard').disabled = false; });
+  });
+
   function start() {
     if (!store) { show('err', '這個分頁還沒設定門市，請總部重新加入分頁'); return; }
     $('storeName').textContent = STORES[store];
@@ -283,6 +297,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       $('meta').textContent = (j.account || '') + '　' + VER;
       show(null);
       $('form').style.display = 'flex';
+      if (j.hq) $('testCard').style.display = 'block';
     }).catch(function (e) {
       var raw = String((e && (e.message || e.errorCode)) || e || '');
       show('err', stage + '沒有成功，請關掉分頁重新開啟');

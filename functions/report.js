@@ -23,6 +23,9 @@ const STORES = {
 };
 
 const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "送出時間", "Teams 帳號", "零用金小計", "零用金明細"];
+// 總部帳號：只有這兩個 Teams 帳號能用總部功能（目前是「發測試卡片」）
+const HQ = ["vvnyu@vvteam888.onmicrosoft.com", "biggaga0586@vvteam888.onmicrosoft.com"];
+const isHq = (account) => HQ.includes(String(account || "").toLowerCase());
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const money = (n) => "$" + Math.round(n).toLocaleString("en-US");
 const num = (n) => Math.round(n).toLocaleString("en-US");
@@ -140,9 +143,9 @@ function buildRow(d, photoUrl, stamp, account) {
   return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account, d.pettySum || 0, pettyText(d.petty)];
 }
 
-function buildCard(d, photoUrl) {
+function buildCard(d, photoUrl, tag) {
   const body = [
-    { type: "TextBlock", text: `${STORES[d.store]}　每日回報`, size: "Large", weight: "Bolder", wrap: true },
+    { type: "TextBlock", text: `${STORES[d.store]}　每日回報${tag ? `（${tag}）` : ""}`, size: "Large", weight: "Bolder", wrap: true },
     { type: "TextBlock", text: `${shortDate(d.date)}　回報人 ${d.who}`, isSubtle: true, wrap: true, spacing: "Small" },
     { type: "FactSet", spacing: "Medium", facts: [
       { title: "總業績", value: money(d.total) },
@@ -310,9 +313,22 @@ async function handle(req, res, deps) {
   const sheets = sheetsApi(GoogleAuth);
   try {
     if (req.method === "GET" && req.query.op === "config") {
-      return res.json({ ok: true, items: await readItems(sheets), account: user.account, name: user.name });
+      return res.json({ ok: true, items: await readItems(sheets), account: user.account, name: user.name, hq: isHq(user.account) });
     }
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "不支援" });
+
+    // 總部專用：發一張測試卡片到指定門市的聊天室（不寫試算表、不存照片）
+    if (req.query.op === "testcard") {
+      if (!isHq(user.account)) return res.status(403).json({ ok: false, error: "只有總部帳號可以發測試卡片" });
+      const store = String((req.body || {}).store || "");
+      if (!STORES[store]) return res.status(400).json({ ok: false, error: "門市不對" });
+      const hook = await readWebhook(sheets, store, GoogleAuth);
+      if (!hook) return res.json({ ok: true, posted: false, reason: "找不到這間店的通知網址" });
+      const sample = { store, date: twNow().date, who: "測試", cash: 469, card: 33014, linepay: 31396, mem: 23, non: 1, total: 64879, cust: 24, avg: 2703,
+        items: (await readItems(sheets)).map((it, i) => ({ ...it, qty: i % 2 })), petty: [{ amount: 120, note: "買垃圾袋", handler: "測試" }], pettySum: 120 };
+      const r = await fetch(hook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildCard(sample, "", "測試")) });
+      return res.json({ ok: true, posted: r.ok || r.status === 202, status: r.status });
+    }
 
     const v = validate(req.body || {}, twNow().date);
     if (v.errs) return res.status(400).json({ ok: false, error: v.errs.join("、") });
@@ -340,5 +356,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, storeDbGet, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, isHq, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };

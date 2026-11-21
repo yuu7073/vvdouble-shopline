@@ -808,11 +808,11 @@ exports.report = onRequest(
   { region: "asia-east1", memory: "512MiB", timeoutSeconds: 60, cors: false },
   (req, res) => report.handle(req, res, { admin, GoogleAuth })
 );
-// 每晚一則彙整推到 LINE（只推給週報接收人）
+// 每天中午 12:05 把「前一天」各店回報彙整成一則推到 LINE（只推給週報接收人）
 exports.reportDigest = onSchedule(
-  { schedule: "30 23 * * *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 60, memory: "256MiB" },
+  { schedule: "5 12 * * *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 60, memory: "256MiB" },
   async () => {
-    const r = await report.pushDigest(admin.database(), report.sheetsApi(GoogleAuth), report.twNow().date);
+    const r = await report.pushDigest(admin.database(), report.sheetsApi(GoogleAuth), report.twNow(Date.now() - 86400000).date);
     console.log("report digest:", JSON.stringify(r));
   }
 );
