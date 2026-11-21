@@ -48,6 +48,29 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
 .prow input{width:100%;min-width:0}
 .prow button{font-family:inherit;height:40px;border:1px solid #D5D9E0;border-radius:8px;background:#fff;color:#5B6472;cursor:pointer;display:flex;align-items:center;justify-content:center}
 @media (max-width:520px){.prow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px}.prow .p-note{grid-column:1 / -1;grid-row:1}}
+.rrow{display:grid;grid-template-columns:minmax(0,1fr) 110px 40px;gap:8px;align-items:center}
+.rrow input{width:100%;min-width:0}
+.rrow button{font-family:inherit;height:40px;border:1px solid #D5D9E0;border-radius:8px;background:#fff;color:#5B6472;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font-family:inherit;font-size:12.5px;min-height:34px;padding:0 13px;border:0;border-radius:999px;background:#EEF0F3;color:#1F2430;cursor:pointer}
+.chips button[aria-pressed=true]{background:#1F2430;color:#fff;font-weight:500}
+.grp{display:flex;flex-direction:column;gap:6px}
+.grp .lab{color:#5B6472}
+.full{width:100%}
+textarea{font-family:inherit;width:100%;min-height:72px;border:1px solid #D5D9E0;border-radius:8px;padding:8px 10px;font-size:16px;color:#1F2430;resize:vertical}
+@media (min-width:600px){textarea{font-size:13.5px}}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.kv>div{display:flex;flex-direction:column}
+.kv .k{color:#5B6472;font-size:12px}
+.kv .v{font-size:15px;font-weight:700}
+.bar{height:8px;border-radius:999px;background:#EEF0F3;overflow:hidden}
+.bar>i{display:block;height:100%;background:#1F2430;border-radius:999px}
+table.t{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.t th,table.t td{padding:6px 4px;text-align:right;border-bottom:1px solid #EEF0F3;white-space:nowrap}
+table.t th{font-weight:500;color:#5B6472;font-size:12px}
+table.t th:first-child,table.t td:first-child{text-align:left}
+.scroll{overflow-x:auto}
+.neg{color:#9B1C12}.pos{color:#17633A}
 #thumb{max-width:180px;border-radius:8px;display:none}
 .meta{color:#5B6472;font-size:12px;word-break:break-all}
 #form{display:none;flex-direction:column;gap:12px}
@@ -93,6 +116,17 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       <div class="row money"><label for="pieces">件數</label><input type="text" inputmode="numeric" id="pieces" data-n></div>
     </div>
 
+    <div class="card">
+      <div class="head"><div class="ttl">銷退</div><div class="big" id="retSum" style="display:none">$0</div></div>
+      <div id="rets" style="display:none;flex-direction:column;gap:10px"></div>
+      <button class="ghost" id="retAdd" type="button">有銷退</button>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="ttl">現金月結</div><div class="sub num">應投庫 <b id="depExp">$0</b>　差額 <b id="depDiff">—</b></div></div>
+      <div class="row money"><label for="deposit">實際投庫</label><input type="text" inputmode="numeric" id="deposit"></div>
+    </div>
+
     <div class="card" id="itemsCard">
       <div class="ttl">滯銷</div>
       <div id="items" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -118,11 +152,37 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       </div>
     </details>
 
+    <details class="sec" id="secScene">
+      <summary><span>現場狀況</span><span class="r"><span id="sceneSum"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+      <div class="secbody">
+    <div class="card">
+      <div class="grp"><div class="lab">人潮</div><div class="chips" data-g="crowd"></div></div>
+      <div class="grp"><div class="lab">客群</div><div class="chips" data-g="customer"></div></div>
+      <div class="grp"><div class="lab">熱銷類別（可複選）</div><div class="chips" data-g="hot" data-multi></div></div>
+      <div class="grp"><div class="lab">商品狀態</div><div class="chips" data-g="stock"></div></div>
+      <div class="grp"><div class="lab">試穿轉換</div><div class="chips" data-g="tryc"></div></div>
+      <div class="grp"><label class="lab" for="sceneNote">補充</label><input class="full" type="text" id="sceneNote" maxlength="200" autocomplete="off"></div>
+      <div class="grp"><label class="lab" for="specialNote">特別狀況</label><textarea id="specialNote" maxlength="500"></textarea></div>
+    </div>
+      </div>
+    </details>
+
     <button class="primary" id="send" type="button">送出回報</button>
+
+    <details class="sec" id="secProg">
+      <summary><span>本月進度</span><span class="r"><span id="progSum"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+      <div class="secbody">
+    <div class="card" id="progCard"><div class="sub" id="progMsg">載入中</div></div>
+    <div class="card" id="allCard" style="display:none"></div>
+      </div>
+    </details>
   </div>
 
   <div class="meta" id="meta"></div>
-  <button class="ghost" id="testCard" type="button" style="display:none">發測試卡片到這間店的聊天室</button>
+  <div id="hqBox" style="display:none;flex-wrap:wrap;gap:8px">
+    <button class="ghost" id="testCard" type="button">發測試回報卡片</button>
+    <button class="ghost" id="testOpen" type="button">發測試開店提醒</button>
+  </div>
 </div>
 
 <script src="teams.min.js"></script>
@@ -144,7 +204,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
     Array.prototype.forEach.call(document.querySelectorAll('[data-dept]'), function (el) { el.style.display = dept ? 'flex' : 'none'; if (!dept) el.querySelector('input').value = ''; });
     Array.prototype.forEach.call(document.querySelectorAll('[data-street]'), function (el) { el.style.display = dept ? 'none' : 'flex'; if (dept) el.querySelector('input').value = ''; });
   }
-  var VER = 'v1.6';
+  var VER = 'v1.7';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -165,6 +225,17 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
     $('sumDaily').textContent = money(total);
     $('cust').textContent = String(cust);
     $('avg').textContent = cust > 0 ? money(total / cust) : '—';
+    depCalc();
+  }
+  // 現金月結：應投庫＝今日現金業績；實際投庫沒填就不算差額
+  function depCalc() {
+    var exp = n($('cash'));
+    $('depExp').textContent = money(exp);
+    var el = $('depDiff');
+    if ($('deposit').value === '') { el.textContent = '—'; el.className = ''; return; }
+    var d = n($('deposit')) - exp;
+    el.textContent = d === 0 ? '$0' : (d > 0 ? '+' : '-') + money(Math.abs(d));
+    el.className = d === 0 ? '' : (d > 0 ? 'pos' : 'neg');
   }
   function bindNumber(el, calc) {
     el.addEventListener('input', function () {
@@ -189,6 +260,68 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       bindNumber(inp, false);
       row.appendChild(lab); row.appendChild(inp); box.appendChild(row);
     });
+  }
+
+  bindNumber($('deposit'), true);
+
+  // 銷退：平常收起來，按「有銷退」才出現欄位；只新增／移除那一列
+  var X_SVG = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  function retSum() {
+    var sum = 0, rows = document.querySelectorAll('#rets .rrow');
+    Array.prototype.forEach.call(rows, function (r) { sum += n(r.querySelector('.r-amt')); });
+    $('retSum').textContent = money(sum);
+    var has = rows.length > 0;
+    $('rets').style.display = has ? 'flex' : 'none';
+    $('retSum').style.display = has ? 'block' : 'none';
+    $('retAdd').textContent = has ? '新增一筆' : '有銷退';
+  }
+  function addRet() {
+    var row = document.createElement('div'); row.className = 'rrow';
+    var no = document.createElement('input'); no.type = 'text'; no.className = 'r-no'; no.placeholder = '銷退單號'; no.maxLength = 40; no.autocomplete = 'off'; no.setAttribute('aria-label', '銷退單號');
+    var amt = document.createElement('input'); amt.type = 'text'; amt.className = 'r-amt'; amt.placeholder = '金額'; amt.inputMode = 'numeric'; amt.setAttribute('aria-label', '銷退金額');
+    amt.addEventListener('input', function () { var c = amt.value.replace(/\D/g, ''); if (c !== amt.value) amt.value = c; retSum(); });
+    var del = document.createElement('button'); del.type = 'button'; del.setAttribute('aria-label', '刪除這一筆'); del.innerHTML = X_SVG;
+    del.addEventListener('click', function () { row.remove(); retSum(); });
+    row.appendChild(no); row.appendChild(amt); row.appendChild(del);
+    $('rets').appendChild(row);
+    retSum();
+    no.focus();
+  }
+  $('retAdd').addEventListener('click', addRet);
+  function collectRets() {
+    return Array.prototype.map.call(document.querySelectorAll('#rets .rrow'), function (r) {
+      return { no: r.querySelector('.r-no').value.trim(), amount: n(r.querySelector('.r-amt')) };
+    });
+  }
+
+  // 現場狀況：選項按鈕只切換自己的狀態，不重畫
+  var OPTS = {
+    crowd: [['cold', '冷清'], ['normal', '普通'], ['warm', '熱絡'], ['full', '爆滿']],
+    customer: [['vip', 'VIP 較多'], ['new', '新客較多'], ['return', '回頭客多'], ['tourist', '遊客較多']],
+    hot: [['dress', '洋裝'], ['top', '上衣'], ['pants', '褲裝'], ['outer', '外套'], ['acc', '配件']],
+    stock: [['ok', '正常'], ['partial', '部分缺貨'], ['hot-out', '熱門商品斷貨'], ['new', '新品到貨']],
+    tryc: [['rare', '幾乎沒人試穿'], ['low', '試穿多但成交低'], ['normal', '普通'], ['good', '轉換好']]
+  };
+  function sceneCount() {
+    var c = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('.chips'), function (g) { if (g.querySelector('[aria-pressed=true]')) c++; });
+    $('sceneSum').textContent = c ? '已選 ' + c + ' 項' : '';
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.chips'), function (box) {
+    var multi = box.hasAttribute('data-multi');
+    OPTS[box.getAttribute('data-g')].forEach(function (o) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = o[1]; b.setAttribute('data-v', o[0]); b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        var on = b.getAttribute('aria-pressed') === 'true';
+        if (!multi) Array.prototype.forEach.call(box.children, function (x) { x.setAttribute('aria-pressed', 'false'); });
+        b.setAttribute('aria-pressed', on ? 'false' : 'true');
+        sceneCount();
+      });
+      box.appendChild(b);
+    });
+  });
+  function picked(g) {
+    return Array.prototype.map.call(document.querySelectorAll('.chips[data-g="' + g + '"] [aria-pressed=true]'), function (b) { return b.getAttribute('data-v'); });
   }
 
   // 零用金：按一次加一列，只新增／移除那一列，不重畫其他列
@@ -255,6 +388,8 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
     var petty = collectPetty();
     var badPetty = petty.some(function (p) { var blank = !p.amount && !p.note && !p.handler; return !blank && (!p.amount || !p.note || !p.handler); });
     if (badPetty) { document.querySelectorAll('details.sec')[1].open = true; show('err', '零用金每筆要填金額、用途、經手人'); window.scrollTo(0, 0); return; }
+    var rets = collectRets();
+    if (rets.some(function (r) { return (r.no || r.amount) && (!r.no || !r.amount); })) { show('err', '銷退每筆要填單號和金額'); window.scrollTo(0, 0); return; }
     if (!photoData) { show('err', '請附日結畫面照片'); window.scrollTo(0, 0); return; }
     var body = {
       store: store, date: $('date').value, who: who,
@@ -262,6 +397,9 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       mem: n($('mem')), non: n($('non')), pieces: n($('pieces')),
       items: items.map(function (it, i) { return { series: it.series, name: it.name, qty: n($('q' + i)) }; }),
       petty: petty,
+      returns: rets, actualDeposit: $('deposit').value === '' ? '' : n($('deposit')),
+      crowd: picked('crowd')[0] || '', customer: picked('customer')[0] || '', hot: picked('hot'), stock: picked('stock')[0] || '', tryc: picked('tryc')[0] || '',
+      sceneNote: $('sceneNote').value.trim(), specialNote: $('specialNote').value.trim(),
       photo: photoData
     };
     busy = true; $('send').disabled = true; $('send').textContent = '送出中';
@@ -273,23 +411,93 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
         if (!j.ok) throw new Error(j.error || '儲存失敗，請再試一次');
         show('ok', j.result === 'updated' ? '已更新今天的回報' : '已送出');
         $('meta').textContent = VER + '　聊天室：' + (j.posted ? '已貼出' : '未貼出');
+        progLoaded = false; if ($('secProg').open) loadProg();
       })
       .catch(function (e) { show('err', (e && e.message) || '送出失敗，請再試一次'); })
       .then(function () { busy = false; $('send').disabled = false; $('send').textContent = '送出回報'; window.scrollTo(0, 0); });
   });
 
-  // 總部帳號才看得到：發一張測試卡片（不寫試算表）
-  $('testCard').addEventListener('click', function () {
-    if (busy) return;
-    busy = true; $('testCard').disabled = true;
-    token().then(function (t) {
-      return fetch(API + '?op=testcard', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ store: store }) });
-    }).then(function (r) { return r.json(); }).then(function (j) {
-      if (!j.ok) throw new Error(j.error || '失敗');
-      $('meta').textContent = VER + '　測試卡片：' + (j.posted ? '已貼出' : '未貼出（' + (j.reason || j.status || '') + '）');
-    }).catch(function (e) { $('meta').textContent = VER + '　測試卡片：失敗 ' + String((e && e.message) || e).slice(0, 120); })
-      .then(function () { busy = false; $('testCard').disabled = false; });
-  });
+  // 總部帳號才看得到：發測試卡片（不寫試算表）
+  function hqTest(btn, op, label) {
+    $(btn).addEventListener('click', function () {
+      if (busy) return;
+      busy = true; $(btn).disabled = true;
+      token().then(function (t) {
+        return fetch(API + '?op=' + op, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify({ store: store }) });
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok) throw new Error(j.error || '失敗');
+        $('meta').textContent = VER + '　' + label + '：' + (j.posted ? '已貼出' : '未貼出（' + (j.reason || j.status || '') + '）');
+      }).catch(function (e) { $('meta').textContent = VER + '　' + label + '：失敗 ' + String((e && e.message) || e).slice(0, 120); })
+        .then(function () { busy = false; $(btn).disabled = false; });
+    });
+  }
+  hqTest('testCard', 'testcard', '測試回報卡片');
+  hqTest('testOpen', 'testopen', '測試開店提醒');
+
+  // 本月進度：打開那一區才去讀；送出回報後會重讀
+  var progLoaded = false, isHq = false;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function kv(box, k, v) { var d = el('div'); d.appendChild(el('div', 'k', k)); d.appendChild(el('div', 'v', v)); box.appendChild(d); }
+  function md(date) { return Number(date.slice(5, 7)) + '/' + Number(date.slice(8)) + '（' + '日一二三四五六'.charAt(new Date(date + 'T00:00:00Z').getUTCDay()) + '）'; }
+  function getJson(q) {
+    return token().then(function (t) { return fetch(API + '?' + q, { headers: { Authorization: 'Bearer ' + t } }); })
+      .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) throw new Error(j.error || '讀取失敗'); return j; });
+  }
+  function renderProg(p) {
+    var card = $('progCard'); card.textContent = '';
+    var box = el('div', 'kv');
+    kv(box, '本月累計', money(p.cum));
+    kv(box, '本月目標', p.monthTarget ? money(p.monthTarget) : '未設定');
+    if (p.monthTarget) { kv(box, '達成率', p.rate + '%'); kv(box, '剩 ' + p.daysLeft + ' 天，每日需', p.needPerDay === null ? '—' : money(p.needPerDay)); }
+    card.appendChild(box);
+    if (p.monthTarget) { var bar = el('div', 'bar'); bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', '達成率 ' + p.rate + '%'); var fill = el('i'); fill.style.width = Math.min(100, p.rate) + '%'; bar.appendChild(fill); card.appendChild(bar); }
+    if (p.paceTarget) {
+      var gap = p.cum - p.paceTarget;
+      card.appendChild(el('div', 'sub', '已回報 ' + p.reported + ' 天，比這幾天的目標' + (gap >= 0 ? '多 ' : '少 ') + money(Math.abs(gap))));
+    }
+    var wrap = el('div', 'scroll'), t = el('table', 't'), hr = el('tr');
+    ['日期', '業績', '目標', '達成', '來客', '客單'].forEach(function (h) { hr.appendChild(el('th', '', h)); });
+    t.appendChild(hr);
+    p.days.slice().reverse().forEach(function (d) {
+      var tr = el('tr');
+      tr.appendChild(el('td', '', md(d.date)));
+      tr.appendChild(el('td', '', d.sales === null ? '未回報' : money(d.sales)));
+      tr.appendChild(el('td', '', d.target ? money(d.target) : '—'));
+      var rate = d.sales !== null && d.target ? Math.round(d.sales / d.target * 100) : null;
+      tr.appendChild(el('td', rate === null ? '' : (rate >= 100 ? 'pos' : 'neg'), rate === null ? '—' : rate + '%'));
+      tr.appendChild(el('td', '', d.sales === null ? '—' : String(d.customers)));
+      tr.appendChild(el('td', '', d.sales !== null && d.customers > 0 ? money(d.sales / d.customers) : '—'));
+      t.appendChild(tr);
+    });
+    wrap.appendChild(t); card.appendChild(wrap);
+    $('progSum').textContent = p.monthTarget ? p.rate + '%' : money(p.cum);
+  }
+  function renderAll(list) {
+    var card = $('allCard'); card.textContent = ''; card.style.display = 'flex';
+    card.appendChild(el('div', 'ttl', '七間門市'));
+    var wrap = el('div', 'scroll'), t = el('table', 't'), hr = el('tr');
+    ['門市', '累計', '目標', '達成', '每日需'].forEach(function (h) { hr.appendChild(el('th', '', h)); });
+    t.appendChild(hr);
+    var sc = 0, st = 0;
+    list.forEach(function (p) {
+      sc += p.cum; st += p.monthTarget || 0;
+      var tr = el('tr');
+      [p.name, money(p.cum), p.monthTarget ? money(p.monthTarget) : '—', p.rate === null ? '—' : p.rate + '%', p.needPerDay === null ? '—' : money(p.needPerDay)].forEach(function (v) { tr.appendChild(el('td', '', v)); });
+      t.appendChild(tr);
+    });
+    var tr = el('tr');
+    ['合計', money(sc), st ? money(st) : '—', st ? Math.round(sc / st * 1000) / 10 + '%' : '—', ''].forEach(function (v) { var td = el('td', '', v); td.style.fontWeight = '700'; tr.appendChild(td); });
+    t.appendChild(tr);
+    wrap.appendChild(t); card.appendChild(wrap);
+  }
+  function loadProg() {
+    if (progLoaded) return;
+    progLoaded = true;
+    getJson('op=progress&store=' + store).then(function (j) { renderProg(j.progress); })
+      .catch(function (e) { progLoaded = false; var c = $('progCard'); c.textContent = ''; c.appendChild(el('div', 'sub', '讀取失敗：' + String((e && e.message) || e).slice(0, 120))); });
+    if (isHq) getJson('op=progress&all=1').then(function (j) { renderAll(j.stores); }).catch(function () {});
+  }
+  $('secProg').addEventListener('toggle', function () { if (this.open) loadProg(); });
 
   function start() {
     if (!store) { show('err', '這個分頁還沒設定門市，請總部重新加入分頁'); return; }
@@ -313,7 +521,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       $('meta').textContent = (j.account || '') + '　' + VER;
       show(null);
       $('form').style.display = 'flex';
-      if (j.hq) $('testCard').style.display = 'block';
+      if (j.hq) { isHq = true; $('hqBox').style.display = 'flex'; }
     }).catch(function (e) {
       var raw = String((e && (e.message || e.errorCode)) || e || '');
       show('err', stage + '沒有成功，請關掉分頁重新開啟');

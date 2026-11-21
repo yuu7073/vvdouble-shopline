@@ -817,6 +817,15 @@ exports.reportDigest = onSchedule(
   }
 );
 
+// 開店提醒：每 5 分鐘看一次，哪一間再 10 分鐘要開門就貼卡片到該店聊天室（每店每天一張）
+exports.reportOpening = onSchedule(
+  { schedule: "*/5 8-14 * * *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 120, memory: "256MiB" },
+  async () => {
+    const r = await require("./ops").sweepOpening(admin.database(), { sheets: report.sheetsApi(GoogleAuth), GoogleAuth });
+    if (r.length) console.log("report opening:", JSON.stringify(r));
+  }
+);
+
 const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
 const EMBED_MARK = "vv-reel-embed";
 
@@ -987,7 +996,7 @@ exports.reels = onRequest(
           const r = await weekly.pushWeekly(db, String(req.query.store || ""), String(req.query.week || ""));
           return res.json({ ok: !!r.ok });
         }
-        if (op === "version") return res.json({ reels: "2026-11-21a" });
+        if (op === "version") return res.json({ reels: "2026-11-22a" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
