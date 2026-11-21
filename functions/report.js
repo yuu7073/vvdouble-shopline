@@ -1,0 +1,310 @@
+// VV DOUBLE · 門市每日回報（Teams 分頁表單 → 這裡）
+// 流程：驗證 Teams 身分 → 存日結照片 → 寫進 Google 試算表 → 貼卡片到該店 Teams 聊天室
+// 這支不對外提供任何讀取業績的入口；沒有通過公司 Teams 身分驗證的請求一律拒絕。
+
+const crypto = require("crypto");
+
+const TENANT_ID = "09e6a165-8708-419d-92c1-9cd91278f953";
+const CLIENT_ID = "2181881e-8ca1-469f-b282-142f9dac88c0";
+const APP_URI = `api://vvdouble-shopline.web.app/${CLIENT_ID}`;
+const SHEET_ID = "1ezYxmJafhs7CHAPO-VNqLhRYOyB1PrKEvcYvaJ1TGw8";
+const PHOTO_BUCKET = "vvdouble-shopline-reports";
+const SELF = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/report";
+const ORIGIN = "https://vvdouble-shopline.web.app";
+
+const STORES = {
+  zhongxiao: "台北忠孝旗艦",
+  tongyi: "統一門市",
+  taoyuan: "桃園 ATT",
+  yizhong: "一中門市",
+  xinyizhong: "台中新一中",
+  xintiandi: "台南門市",
+  xinjuejiang: "高雄門市",
+};
+
+const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "送出時間", "Teams 帳號"];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const money = (n) => "$" + Math.round(n).toLocaleString("en-US");
+const num = (n) => Math.round(n).toLocaleString("en-US");
+
+function twNow(ts = Date.now()) {
+  const d = new Date(ts + 8 * 3600000);
+  const p = (n) => String(n).padStart(2, "0");
+  return {
+    date: `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`,
+    stamp: `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`,
+  };
+}
+function shortDate(date) {
+  const [y, m, d] = date.split("-").map(Number);
+  const w = "日一二三四五六".charAt(new Date(Date.UTC(y, m - 1, d)).getUTCDay());
+  return `${m}/${d}（${w}）`;
+}
+
+// ---------- Teams 身分驗證（驗簽章、租用戶、對象、有效期） ----------
+let keyCache = { at: 0, keys: [] };
+async function msKeys(fetchFn = fetch) {
+  if (Date.now() - keyCache.at < 6 * 3600000 && keyCache.keys.length) return keyCache.keys;
+  const r = await fetchFn(`https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`);
+  if (!r.ok) throw new Error("讀不到 Microsoft 金鑰 " + r.status);
+  const j = await r.json();
+  keyCache = { at: Date.now(), keys: j.keys || [] };
+  return keyCache.keys;
+}
+const b64u = (s) => Buffer.from(String(s).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+
+function verifyToken(token, keys, opt = {}) {
+  const now = opt.now || Date.now();
+  const tenant = opt.tenant || TENANT_ID;
+  const audiences = opt.audiences || [CLIENT_ID, APP_URI];
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) throw new Error("格式不對");
+  let head, body;
+  try { head = JSON.parse(b64u(parts[0]).toString("utf8")); body = JSON.parse(b64u(parts[1]).toString("utf8")); }
+  catch (e) { throw new Error("格式不對"); }
+  if (head.alg !== "RS256") throw new Error("簽章方式不對");
+  const jwk = (keys || []).find((k) => k.kid === head.kid);
+  if (!jwk) throw new Error("找不到金鑰");
+  const pub = crypto.createPublicKey({ key: { kty: jwk.kty, n: jwk.n, e: jwk.e }, format: "jwk" });
+  const ok = crypto.verify("RSA-SHA256", Buffer.from(parts[0] + "." + parts[1]), pub, b64u(parts[2]));
+  if (!ok) throw new Error("簽章不對");
+  if (body.tid !== tenant) throw new Error("不是公司帳號");
+  const issOk = body.iss === `https://login.microsoftonline.com/${tenant}/v2.0` || body.iss === `https://sts.windows.net/${tenant}/`;
+  if (!issOk) throw new Error("發行者不對");
+  if (!audiences.includes(body.aud)) throw new Error("對象不對");
+  const sec = Math.floor(now / 1000);
+  if (!(Number(body.exp) > sec - 60)) throw new Error("已過期");
+  if (body.nbf && Number(body.nbf) > sec + 300) throw new Error("尚未生效");
+  return { account: body.preferred_username || body.upn || body.unique_name || "", name: body.name || "", oid: body.oid || "" };
+}
+
+// ---------- 檢查表單內容 ----------
+function int(v, max) {
+  if (v === "" || v === null || v === undefined) return 0;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > max) return NaN;
+  return n;
+}
+function validate(b, today) {
+  const errs = [];
+  const store = String(b.store || "");
+  if (!STORES[store]) errs.push("門市不對");
+  const date = String(b.date || "");
+  if (!DATE_RE.test(date) || date > today) errs.push("日期不對");
+  const who = String(b.who || "").trim().slice(0, 30);
+  if (!who) errs.push("請填回報人");
+  const f = {};
+  for (const k of ["cash", "card", "linepay"]) { f[k] = int(b[k], 100000000); if (Number.isNaN(f[k])) errs.push("金額不對"); }
+  for (const k of ["mem", "non"]) { f[k] = int(b[k], 100000); if (Number.isNaN(f[k])) errs.push("來客數不對"); }
+  const items = [];
+  (Array.isArray(b.items) ? b.items : []).slice(0, 60).forEach((it) => {
+    const name = String((it && it.name) || "").trim().slice(0, 120);
+    const series = String((it && it.series) || "").trim().slice(0, 40);
+    const qty = int(it && it.qty, 100000);
+    if (!name) return;
+    if (Number.isNaN(qty)) errs.push("滯銷數量不對"); else items.push({ series, name, qty });
+  });
+  const photo = String(b.photo || "");
+  const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(photo);
+  if (!m) errs.push("請附日結畫面照片");
+  else if (m[1].length > 6000000) errs.push("照片太大");
+  if (errs.length) return { errs: [...new Set(errs)] };
+  const total = f.cash + f.card + f.linepay;
+  const cust = f.mem + f.non;
+  return {
+    data: { store, date, who, ...f, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items },
+    photoB64: m[1],
+  };
+}
+
+function itemsText(items) {
+  return items.map((i) => `${i.series ? `《${i.series}》` : ""}${i.name}*${i.qty}`).join("\n");
+}
+// 以單引號開頭的話試算表會吃掉；回報人、帳號這類文字欄一律當純文字寫入（RAW），不會被當公式執行
+function buildRow(d, photoUrl, stamp, account) {
+  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account];
+}
+
+function buildCard(d, photoUrl) {
+  const body = [
+    { type: "TextBlock", text: `${STORES[d.store]}　每日回報`, size: "Large", weight: "Bolder", wrap: true },
+    { type: "TextBlock", text: `${shortDate(d.date)}　回報人 ${d.who}`, isSubtle: true, wrap: true, spacing: "Small" },
+    { type: "FactSet", spacing: "Medium", facts: [
+      { title: "總業績", value: money(d.total) },
+      { title: "付款", value: `現金 ${num(d.cash)} / 刷卡 ${num(d.card)} / LINE Pay ${num(d.linepay)}` },
+      { title: "來客數", value: `${num(d.cust)}（會員 ${num(d.mem)} / 非會員 ${num(d.non)}）` },
+      { title: "平均客單", value: d.cust > 0 ? money(d.avg) : "—" },
+    ] },
+  ];
+  if (d.items.length) {
+    body.push({ type: "TextBlock", text: "滯銷", weight: "Bolder", spacing: "Medium" });
+    body.push({ type: "TextBlock", text: d.items.map((i) => `${i.series ? `《${i.series}》` : ""}${i.name} *${i.qty}`).join("\n\n"), wrap: true, spacing: "Small" });
+  }
+  if (photoUrl) body.push({ type: "Image", url: photoUrl, size: "Large", spacing: "Medium", altText: "日結畫面" });
+  return {
+    type: "message",
+    attachments: [{
+      contentType: "application/vnd.microsoft.card.adaptive",
+      content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4", body },
+    }],
+  };
+}
+
+// ---------- 試算表 ----------
+function sheetsApi(GoogleAuth) {
+  const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
+  const base = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
+  const call = async (path, opt = {}) => {
+    const client = await auth.getClient();
+    const r = await client.request({ url: base + path, method: opt.method || "GET", data: opt.data });
+    return r.data;
+  };
+  return {
+    get: (range) => call(`/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`).then((d) => d.values || []),
+    update: (range, row) => call(`/values/${encodeURIComponent(range)}?valueInputOption=RAW`, { method: "PUT", data: { values: [row] } }),
+    append: (range, row) => call(`/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: "POST", data: { values: [row] } }),
+  };
+}
+// 同一間店同一天再送一次＝更新那一列，不會多出一列
+async function upsertRow(sheets, row) {
+  const keys = await sheets.get("回報!A2:B");
+  const idx = keys.findIndex((r) => r[0] === row[0] && r[1] === row[1]);
+  if (idx >= 0) { await sheets.update(`回報!A${idx + 2}:O${idx + 2}`, row); return "updated"; }
+  await sheets.append("回報!A:O", row);
+  return "added";
+}
+async function readItems(sheets) {
+  const rows = await sheets.get("滯銷品項!A2:B");
+  return rows.map((r) => ({ series: String(r[0] || "").trim(), name: String(r[1] || "").trim() })).filter((r) => r.name);
+}
+async function readWebhook(sheets, store) {
+  const rows = await sheets.get("設定!A2:C");
+  const hit = rows.find((r) => r[0] === store);
+  const url = hit ? String(hit[2] || "").trim() : "";
+  return /^https:\/\//.test(url) ? url : "";
+}
+
+// ---------- 照片（私人儲存；網址含一段猜不到的亂碼，只寫在試算表與該店聊天室） ----------
+async function savePhoto(admin, b64) {
+  const bucket = admin.storage().bucket(PHOTO_BUCKET);
+  const [exists] = await bucket.exists();
+  if (!exists) await bucket.create({ location: "asia-east1" });
+  const key = crypto.randomBytes(24).toString("hex");
+  await bucket.file(`photos/${key}.jpg`).save(Buffer.from(b64, "base64"), { contentType: "image/jpeg", resumable: false });
+  return `${SELF}?op=photo&k=${key}`;
+}
+async function sendPhoto(admin, res, key) {
+  if (!/^[a-f0-9]{48}$/.test(String(key || ""))) return res.status(404).send("");
+  const file = admin.storage().bucket(PHOTO_BUCKET).file(`photos/${key}.jpg`);
+  const [exists] = await file.exists();
+  if (!exists) return res.status(404).send("");
+  res.set("Content-Type", "image/jpeg");
+  res.set("Cache-Control", "private, max-age=86400");
+  res.set("X-Robots-Tag", "noindex");
+  file.createReadStream().on("error", () => res.status(500).end()).pipe(res);
+}
+
+// ---------- LINE：一天一則彙整（省額度），另外私訊「今日」隨時查（回覆不計額度） ----------
+function digestText(date, rows) {
+  const done = rows.filter((r) => r[0] === date);
+  const names = Object.values(STORES);
+  const missing = names.filter((n) => !done.some((r) => r[1] === n));
+  const lines = [`每日回報｜${shortDate(date)}`, `已回報 ${done.length} / ${names.length}`];
+  let sum = 0;
+  done.forEach((r) => {
+    const total = Number(r[3]) || 0, cust = Number(r[7]) || 0;
+    sum += total;
+    lines.push("", `${r[1]}　${r[2] || ""}`.trim(), `業績 ${money(total)}　來客 ${num(cust)}　客單 ${cust > 0 ? money(Number(r[10]) || 0) : "—"}`);
+    lines.push(`現金 ${num(Number(r[4]) || 0)} / 刷卡 ${num(Number(r[5]) || 0)} / LINE Pay ${num(Number(r[6]) || 0)}`);
+  });
+  if (done.length) lines.push("", `合計 ${money(sum)}`);
+  if (missing.length) lines.push("", "未回報", missing.join("、"));
+  return lines.join("\n");
+}
+async function lineOwner(db) {
+  const [o, t] = await Promise.all([db.ref("/line/weeklyOwner").get(), db.ref("/config/lineToken").get()]);
+  return { owner: o.exists() ? o.val().id : "", token: t.exists() ? t.val() : "" };
+}
+async function pushDigest(db, sheets, date) {
+  const { owner, token } = await lineOwner(db);
+  if (!owner || !token) return { ok: false, skipped: "LINE 還沒設定接收人" };
+  const rows = await sheets.get("回報!A2:O");
+  const r = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ to: owner, messages: [{ type: "text", text: digestText(date, rows).slice(0, 4900) }] }),
+  });
+  return { ok: r.ok, status: r.status };
+}
+// 只有週報接收人本人私訊「今日」才會回，其他人傳一樣的字不會有反應
+async function handleLineEvent(db, ev, GoogleAuth) {
+  const src = ev.source || {};
+  if (ev.type !== "message" || src.type !== "user" || !src.userId) return false;
+  const text = String((ev.message || {}).text || "").trim();
+  if (text !== "今日" && text !== "昨日") return false;
+  const { owner, token } = await lineOwner(db);
+  if (!owner || owner !== src.userId || !token || !ev.replyToken) return true;
+  const date = twNow(Date.now() - (text === "昨日" ? 86400000 : 0)).date;
+  const rows = await sheetsApi(GoogleAuth).get("回報!A2:O");
+  await fetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ replyToken: ev.replyToken, messages: [{ type: "text", text: digestText(date, rows).slice(0, 4900) }] }),
+  });
+  return true;
+}
+
+// ---------- HTTP 入口 ----------
+async function handle(req, res, deps) {
+  const { admin, GoogleAuth } = deps;
+  res.set("Access-Control-Allow-Origin", ORIGIN);
+  res.set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.set("Access-Control-Max-Age", "3600");
+  res.set("Vary", "Origin");
+  if (req.method === "OPTIONS") return res.status(204).send("");
+
+  if (req.method === "GET" && req.query.op === "photo") return sendPhoto(admin, res, req.query.k);
+
+  let user;
+  try {
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || "");
+    if (!m) throw new Error("沒有身分");
+    user = verifyToken(m[1], await msKeys());
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: "身分驗證沒過，請從 Teams 重新開啟" });
+  }
+
+  const sheets = sheetsApi(GoogleAuth);
+  try {
+    if (req.method === "GET" && req.query.op === "config") {
+      return res.json({ ok: true, items: await readItems(sheets), account: user.account, name: user.name });
+    }
+    if (req.method !== "POST") return res.status(405).json({ ok: false, error: "不支援" });
+
+    const v = validate(req.body || {}, twNow().date);
+    if (v.errs) return res.status(400).json({ ok: false, error: v.errs.join("、") });
+
+    const photoUrl = await savePhoto(admin, v.photoB64);
+    const result = await upsertRow(sheets, buildRow(v.data, photoUrl, twNow().stamp, user.account));
+
+    // 貼到該店聊天室：失敗不影響回報本身（資料已經在試算表）
+    let posted = false;
+    try {
+      const hook = await readWebhook(sheets, v.data.store);
+      if (hook) {
+        const r = await fetch(hook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildCard(v.data, photoUrl)) });
+        posted = r.ok || r.status === 202;
+      }
+    } catch (e) { console.error("report teams", e); }
+
+    return res.json({ ok: true, result, posted });
+  } catch (e) {
+    console.error("report", e);
+    return res.status(500).json({ ok: false, error: "儲存失敗，請再試一次" });
+  }
+}
+
+module.exports = {
+  STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
+  twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText,
+  upsertRow, readItems, readWebhook, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+};

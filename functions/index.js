@@ -7,6 +7,7 @@ const admin = require("firebase-admin");
 const { GoogleAuth } = require("google-auth-library");
 const { buildSeo, RULE_VERSION } = require("./seo");
 const weekly = require("./weekly");
+const report = require("./report");
 
 admin.initializeApp();
 
@@ -802,6 +803,20 @@ exports.weeklyLineSweep = onSchedule(
   }
 );
 
+// 門市每日回報（Teams 分頁表單）：驗身分 → 存照片 → 寫試算表 → 貼該店聊天室
+exports.report = onRequest(
+  { region: "asia-east1", memory: "512MiB", timeoutSeconds: 60, cors: false },
+  (req, res) => report.handle(req, res, { admin, GoogleAuth })
+);
+// 每晚一則彙整推到 LINE（只推給週報接收人）
+exports.reportDigest = onSchedule(
+  { schedule: "30 23 * * *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 60, memory: "256MiB" },
+  async () => {
+    const r = await report.pushDigest(admin.database(), report.sheetsApi(GoogleAuth), report.twNow().date);
+    console.log("report digest:", JSON.stringify(r));
+  }
+);
+
 const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
 const EMBED_MARK = "vv-reel-embed";
 
@@ -972,7 +987,7 @@ exports.reels = onRequest(
           const r = await weekly.pushWeekly(db, String(req.query.store || ""), String(req.query.week || ""));
           return res.json({ ok: !!r.ok });
         }
-        if (op === "version") return res.json({ reels: "2026-11-19a" });
+        if (op === "version") return res.json({ reels: "2026-11-21a" });
         return res.status(404).send(page("VV Reels", "這是程式後端。"));
       } catch (e) {
         console.error(e);
@@ -996,6 +1011,7 @@ exports.reels = onRequest(
           const id = src.groupId || src.roomId || src.userId;
           if (!id) continue;
           try { await weekly.handleLineEvent(db, ev); } catch (e) { console.error("weekly owner", e); }
+          try { await report.handleLineEvent(db, ev, GoogleAuth); } catch (e) { console.error("report line", e); }
           if (ev.type === "leave" || ev.type === "unfollow") await db.ref(`/line/targets/${id}`).remove();
           else if (["join", "follow", "message", "memberJoined"].includes(ev.type)) await db.ref(`/line/targets/${id}`).set({ type: src.type || "", at: Date.now() });
         }

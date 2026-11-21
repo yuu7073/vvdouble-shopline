@@ -17,67 +17,74 @@ h1{margin:0;font-size:18px}
 .head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .ttl{font-weight:700}
 .big{font-size:22px;font-weight:700}
-.num b{font-size:15px}
+.num b{font-size:15px;color:#1F2430}
 .row{display:flex;align-items:center;gap:12px}
 .row label{flex:1 1 0;min-width:0}
 .row.money label{color:#5B6472}
-input[type=text]{font-family:inherit;height:46px;border:1px solid #D5D9E0;border-radius:8px;padding:0 12px;font-size:16px;color:#1F2430;background:#fff}
+input[type=text],input[type=date]{font-family:inherit;height:46px;border:1px solid #D5D9E0;border-radius:8px;padding:0 12px;font-size:16px;color:#1F2430;background:#fff}
 .money input{flex:none;width:170px;text-align:right}
 .qty input{flex:none;width:64px;text-align:center;padding:0}
-#who{width:100%}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.two>div{display:flex;flex-direction:column;gap:6px}
+.two input{width:100%}
 .chip{align-self:flex-start;padding:3px 10px;border-radius:999px;background:#EEF0F3}
-.bar{padding:10px 14px;border-radius:12px;background:#FFF4D6;color:#6B4E00;font-weight:500}
-.ok{padding:12px 14px;border-radius:12px;background:#E6F4EC;color:#17633A;font-weight:500;display:none}
+.msg{padding:12px 14px;border-radius:12px;font-weight:500;display:none}
+.msg.ok{background:#E6F4EC;color:#17633A}
+.msg.err{background:#FDE8E6;color:#9B1C12}
+.msg.info{background:#EEF0F3;color:#1F2430}
 button.primary{font-family:inherit;height:52px;border:0;border-radius:10px;background:#1F2430;color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+button.primary:disabled{background:#8A93A3;cursor:default}
 .file{font-family:inherit;font-size:13px}
-#thumb{max-width:160px;border-radius:8px;display:none}
+#thumb{max-width:180px;border-radius:8px;display:none}
 .meta{color:#5B6472;font-size:12px;word-break:break-all}
+#form{display:none;flex-direction:column;gap:12px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div>
     <h1>每日回報</h1>
-    <div class="sub"><span id="storeName"></span>　<span id="today"></span></div>
+    <div class="sub" id="storeName"></div>
   </div>
 
-  <div class="bar">測試版：送出不會儲存</div>
-  <div class="ok" id="ok">已送出（測試，未儲存）</div>
+  <div class="msg info" id="info">載入中</div>
+  <div class="msg ok" id="ok"></div>
+  <div class="msg err" id="err"></div>
 
-  <div class="card">
-    <label class="ttl" for="who">回報人</label>
-    <input type="text" id="who" autocomplete="off">
+  <div id="form">
+    <div class="card">
+      <div class="two">
+        <div><label class="ttl" for="date">日期</label><input type="date" id="date"></div>
+        <div><label class="ttl" for="who">回報人</label><input type="text" id="who" autocomplete="off" maxlength="30"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="ttl">總業績</div><div class="big" id="total">$0</div></div>
+      <div class="row money"><label for="cash">現金</label><input type="text" inputmode="numeric" id="cash" data-n></div>
+      <div class="row money"><label for="card">刷卡</label><input type="text" inputmode="numeric" id="card" data-n></div>
+      <div class="row money"><label for="linepay">LINE Pay</label><input type="text" inputmode="numeric" id="linepay" data-n></div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="ttl">來客</div><div class="sub num">來客數 <b id="cust">0</b>　客單 <b id="avg">—</b></div></div>
+      <div class="row money"><label for="mem">會員</label><input type="text" inputmode="numeric" id="mem" data-n></div>
+      <div class="row money"><label for="non">非會員</label><input type="text" inputmode="numeric" id="non" data-n></div>
+    </div>
+
+    <div class="card" id="itemsCard">
+      <div class="ttl">滯銷</div>
+      <div id="items" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+
+    <div class="card">
+      <label class="ttl" for="photo">日結畫面</label>
+      <input class="file" type="file" id="photo" accept="image/*">
+      <img id="thumb" alt="已選的照片">
+    </div>
+
+    <button class="primary" id="send" type="button">送出回報</button>
   </div>
-
-  <div class="card">
-    <div class="head"><div class="ttl">總業績</div><div class="big" id="total">$0</div></div>
-    <div class="row money"><label for="cash">現金</label><input type="text" inputmode="numeric" id="cash" data-n></div>
-    <div class="row money"><label for="card">刷卡</label><input type="text" inputmode="numeric" id="card" data-n></div>
-    <div class="row money"><label for="linepay">LINE Pay</label><input type="text" inputmode="numeric" id="linepay" data-n></div>
-  </div>
-
-  <div class="card">
-    <div class="head"><div class="ttl">來客</div><div class="sub num">來客數 <b id="cust" style="color:#1F2430">0</b>　客單 <b id="avg" style="color:#1F2430">—</b></div></div>
-    <div class="row money"><label for="mem">會員</label><input type="text" inputmode="numeric" id="mem" data-n></div>
-    <div class="row money"><label for="non">非會員</label><input type="text" inputmode="numeric" id="non" data-n></div>
-  </div>
-
-  <div class="card">
-    <div class="row"><div class="ttl">滯銷</div><div class="chip">GAGA聯名</div></div>
-    <div class="row qty"><label for="q1">流璃光院閃耀星鑽長袖透膚上衣(附背心)</label><input type="text" inputmode="numeric" id="q1" data-n></div>
-    <div class="row qty"><label for="q2">嵐山冬日極致包裹蓬鬆鋪棉連帽外套(連帽可折)</label><input type="text" inputmode="numeric" id="q2" data-n></div>
-    <div class="row qty"><label for="q3">京都新篇重磅棉料率性短袖T-shirt-一般</label><input type="text" inputmode="numeric" id="q3" data-n></div>
-    <div class="row qty"><label for="q4">細閃金平糖柔膚清透綁帶雪紡削肩上衣</label><input type="text" inputmode="numeric" id="q4" data-n></div>
-    <div class="row qty"><label for="q5">稻荷秋色蕾絲拼接挺版斜紋布襯衫</label><input type="text" inputmode="numeric" id="q5" data-n></div>
-  </div>
-
-  <div class="card">
-    <label class="ttl" for="photo">日結畫面</label>
-    <input class="file" type="file" id="photo" accept="image/*">
-    <img id="thumb" alt="已選的照片">
-  </div>
-
-  <button class="primary" id="send" type="button">送出回報</button>
 
   <div class="meta" id="meta"></div>
 </div>
@@ -85,62 +92,131 @@ button.primary{font-family:inherit;height:52px;border:0;border-radius:10px;backg
 <script src="teams.min.js"></script>
 <script>
 (function () {
+  var API = 'https://asia-east1-vvdouble-shopline.cloudfunctions.net/report';
   var STORES = { zhongxiao: '台北忠孝旗艦', tongyi: '統一門市', taoyuan: '桃園 ATT', yizhong: '一中門市', xinyizhong: '台中新一中', xintiandi: '台南門市', xinjuejiang: '高雄門市' };
   var $ = function (id) { return document.getElementById(id); };
   var qs = new URLSearchParams(location.search);
-  var store = STORES[qs.get('store')] ? qs.get('store') : 'zhongxiao';
-  $('storeName').textContent = STORES[store];
+  var store = STORES[qs.get('store')] ? qs.get('store') : '';
+  var items = [];
+  var photoData = '';
+  var busy = false;
 
-  var now = new Date(Date.now() + 8 * 3600000);
-  $('today').textContent = (now.getUTCMonth() + 1) + '/' + now.getUTCDate() + '（' + '日一二三四五六'.charAt(now.getUTCDay()) + '）';
-
-  var n = function (id) { return parseInt($(id).value, 10) || 0; };
+  function show(id, text) {
+    ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
+    if (id) { $(id).textContent = text; $(id).style.display = 'block'; }
+  }
+  function today() {
+    var d = new Date(Date.now() + 8 * 3600000);
+    return d.toISOString().slice(0, 10);
+  }
+  var n = function (el) { return parseInt(el.value, 10) || 0; };
   var money = function (v) { return '$' + Math.round(v).toLocaleString('en-US'); };
 
   // 只改數字顯示的文字，不重畫輸入框，所以打字不會跳掉
   function recalc() {
-    var total = n('cash') + n('card') + n('linepay');
-    var cust = n('mem') + n('non');
+    var total = n($('cash')) + n($('card')) + n($('linepay'));
+    var cust = n($('mem')) + n($('non'));
     $('total').textContent = money(total);
     $('cust').textContent = String(cust);
     $('avg').textContent = cust > 0 ? money(total / cust) : '—';
   }
-  Array.prototype.forEach.call(document.querySelectorAll('input[data-n]'), function (el) {
+  function bindNumber(el, calc) {
     el.addEventListener('input', function () {
       var clean = el.value.replace(/\D/g, '');
       if (clean !== el.value) el.value = clean;
-      $('ok').style.display = 'none';
-      recalc();
+      if (calc) recalc();
     });
-  });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('input[data-n]'), function (el) { bindNumber(el, true); });
 
+  // 滯銷品項：清單由總部在試算表維護，這裡只在載入時畫一次
+  function renderItems(list) {
+    items = list || [];
+    var box = $('items');
+    box.textContent = '';
+    if (!items.length) { $('itemsCard').style.display = 'none'; return; }
+    items.forEach(function (it, i) {
+      var row = document.createElement('div'); row.className = 'row qty';
+      var lab = document.createElement('label'); lab.htmlFor = 'q' + i;
+      lab.textContent = (it.series ? '《' + it.series + '》' : '') + it.name;
+      var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'numeric'; inp.id = 'q' + i;
+      bindNumber(inp, false);
+      row.appendChild(lab); row.appendChild(inp); box.appendChild(row);
+    });
+  }
+
+  // 照片先在手機／電腦上縮小再傳，避免原圖太大傳不上去
   $('photo').addEventListener('change', function () {
     var f = this.files && this.files[0];
     var img = $('thumb');
+    photoData = '';
     if (!f) { img.style.display = 'none'; return; }
-    img.src = URL.createObjectURL(f);
-    img.style.display = 'block';
+    var url = URL.createObjectURL(f);
+    var im = new Image();
+    im.onload = function () {
+      var max = 1600, w = im.naturalWidth, h = im.naturalHeight;
+      var s = Math.min(1, max / Math.max(w, h));
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+      var g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(im, 0, 0, c.width, c.height);
+      photoData = c.toDataURL('image/jpeg', 0.82);
+      img.src = photoData; img.style.display = 'block';
+      URL.revokeObjectURL(url);
+    };
+    im.onerror = function () { show('err', '這張照片讀不出來，請換一張'); URL.revokeObjectURL(url); };
+    im.src = url;
   });
+
+  function token() { return microsoftTeams.authentication.getAuthToken(); }
 
   $('send').addEventListener('click', function () {
-    $('ok').style.display = 'block';
-    window.scrollTo(0, 0);
+    if (busy) return;
+    var who = $('who').value.trim();
+    if (!who) { show('err', '請填回報人'); window.scrollTo(0, 0); return; }
+    if (!$('date').value) { show('err', '請選日期'); window.scrollTo(0, 0); return; }
+    if (!photoData) { show('err', '請附日結畫面照片'); window.scrollTo(0, 0); return; }
+    var body = {
+      store: store, date: $('date').value, who: who,
+      cash: n($('cash')), card: n($('card')), linepay: n($('linepay')), mem: n($('mem')), non: n($('non')),
+      items: items.map(function (it, i) { return { series: it.series, name: it.name, qty: n($('q' + i)) }; }),
+      photo: photoData
+    };
+    busy = true; $('send').disabled = true; $('send').textContent = '送出中';
+    show(null);
+    token().then(function (t) {
+      return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify(body) });
+    }).then(function (r) { return r.json().catch(function () { return { ok: false, error: '儲存失敗，請再試一次' }; }); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error || '儲存失敗，請再試一次');
+        show('ok', j.result === 'updated' ? '已更新今天的回報' : '已送出');
+      })
+      .catch(function (e) { show('err', (e && e.message) || '送出失敗，請再試一次'); })
+      .then(function () { busy = false; $('send').disabled = false; $('send').textContent = '送出回報'; window.scrollTo(0, 0); });
   });
 
-  // Teams：拿登入身分，確認「不用密碼就知道是誰」這件事成立
-  var meta = $('meta');
-  function show(lines) { meta.textContent = lines.join('　'); }
-  try {
-    if (!window.microsoftTeams) { show(['不在 Teams 內']); return; }
+  function start() {
+    if (!store) { show('err', '這個分頁還沒設定門市，請總部重新加入分頁'); return; }
+    $('storeName').textContent = STORES[store];
+    $('date').value = today(); $('date').max = today();
+    if (!window.microsoftTeams) { show('err', '請從 Teams 的「門市回報」分頁開啟'); return; }
     microsoftTeams.app.initialize().then(function () {
-      return microsoftTeams.app.getContext();
-    }).then(function (ctx) {
-      var u = (ctx && ctx.user) || {};
-      var host = (ctx && ctx.app && ctx.app.host) || {};
-      show(['Teams 帳號：' + (u.userPrincipalName || u.loginHint || '讀不到'), '裝置：' + (host.clientType || '?')]);
       try { microsoftTeams.app.notifySuccess(); } catch (e) {}
-    }).catch(function () { show(['不在 Teams 內']); });
-  } catch (e) { show(['不在 Teams 內']); }
+      return token();
+    }).then(function (t) {
+      return fetch(API + '?op=config', { headers: { Authorization: 'Bearer ' + t } });
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) throw new Error(j.error || '載入失敗');
+      renderItems(j.items);
+      $('meta').textContent = j.account || '';
+      show(null);
+      $('form').style.display = 'flex';
+    }).catch(function (e) {
+      show('err', (e && e.message && /[一-鿿]/.test(e.message)) ? e.message : '請從 Teams 的「門市回報」分頁開啟');
+    });
+  }
+  start();
 })();
 </script>
 </body>
