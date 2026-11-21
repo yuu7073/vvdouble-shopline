@@ -209,7 +209,7 @@ button.primary:disabled{background:#8A93A3;cursor:default}
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j.ok) throw new Error(j.error || '載入失敗');
       renderItems(j.items);
-      $('meta').textContent = j.account || '';
+      $('meta').textContent = (j.account || '') + '　v1.0';
       show(null);
       $('form').style.display = 'flex';
     }).catch(function (e) {
