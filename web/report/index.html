@@ -79,13 +79,18 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       <div class="head"><div class="ttl">總業績</div><div class="big" id="total">$0</div></div>
       <div class="row money"><label for="cash">現金</label><input type="text" inputmode="numeric" id="cash" data-n></div>
       <div class="row money"><label for="card">刷卡</label><input type="text" inputmode="numeric" id="card" data-n></div>
-      <div class="row money"><label for="linepay">LINE Pay</label><input type="text" inputmode="numeric" id="linepay" data-n></div>
+      <div class="row money" data-street><label for="linepay">LINE Pay</label><input type="text" inputmode="numeric" id="linepay" data-n></div>
+      <div class="row money" data-dept><label for="voucherE">電子抵用券</label><input type="text" inputmode="numeric" id="voucherE" data-n></div>
+      <div class="row money" data-dept><label for="voucherG">商品抵用券</label><input type="text" inputmode="numeric" id="voucherG" data-n></div>
+      <div class="row money" data-dept><label for="mobile">行動支付</label><input type="text" inputmode="numeric" id="mobile" data-n></div>
+      <div class="row money" data-dept><label for="other">其他支付</label><input type="text" inputmode="numeric" id="other" data-n></div>
     </div>
 
     <div class="card">
       <div class="head"><div class="ttl">來客</div><div class="sub num">來客數 <b id="cust">0</b>　客單 <b id="avg">—</b></div></div>
       <div class="row money"><label for="mem">會員</label><input type="text" inputmode="numeric" id="mem" data-n></div>
       <div class="row money"><label for="non">非會員</label><input type="text" inputmode="numeric" id="non" data-n></div>
+      <div class="row money"><label for="pieces">件數</label><input type="text" inputmode="numeric" id="pieces" data-n></div>
     </div>
 
     <div class="card" id="itemsCard">
@@ -131,7 +136,15 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
   var items = [];
   var photoData = '';
   var busy = false;
-  var VER = 'v1.5';
+  var PAYKEYS = ['cash', 'card', 'linepay', 'voucherE', 'voucherG', 'mobile', 'other'];
+  var DEPT_DEFAULT = ['tongyi', 'taoyuan', 'xintiandi'];
+  // 依門市類型顯示付款欄位（先用內建名單畫，載入設定後以後端名單為準）
+  function applyStoreType(list) {
+    var dept = (list || DEPT_DEFAULT).indexOf(store) >= 0;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-dept]'), function (el) { el.style.display = dept ? 'flex' : 'none'; if (!dept) el.querySelector('input').value = ''; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-street]'), function (el) { el.style.display = dept ? 'none' : 'flex'; if (dept) el.querySelector('input').value = ''; });
+  }
+  var VER = 'v1.6';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -146,7 +159,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
 
   // 只改數字顯示的文字，不重畫輸入框，所以打字不會跳掉
   function recalc() {
-    var total = n($('cash')) + n($('card')) + n($('linepay'));
+    var total = PAYKEYS.reduce(function (a, k) { return a + n($(k)); }, 0);
     var cust = n($('mem')) + n($('non'));
     $('total').textContent = money(total);
     $('sumDaily').textContent = money(total);
@@ -245,7 +258,8 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
     if (!photoData) { show('err', '請附日結畫面照片'); window.scrollTo(0, 0); return; }
     var body = {
       store: store, date: $('date').value, who: who,
-      cash: n($('cash')), card: n($('card')), linepay: n($('linepay')), mem: n($('mem')), non: n($('non')),
+      cash: n($('cash')), card: n($('card')), linepay: n($('linepay')), voucherE: n($('voucherE')), voucherG: n($('voucherG')), mobile: n($('mobile')), other: n($('other')),
+      mem: n($('mem')), non: n($('non')), pieces: n($('pieces')),
       items: items.map(function (it, i) { return { series: it.series, name: it.name, qty: n($('q' + i)) }; }),
       petty: petty,
       photo: photoData
@@ -281,6 +295,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
     if (!store) { show('err', '這個分頁還沒設定門市，請總部重新加入分頁'); return; }
     $('storeName').textContent = STORES[store];
     $('date').value = today(); $('date').max = today();
+    applyStoreType();
     if (!window.microsoftTeams) { show('err', '請從 Teams 的「門市回報」分頁開啟'); return; }
     var stage = '啟動';
     var withTimeout = function (pr, ms) { return Promise.race([pr, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('逾時')); }, ms); })]); };
@@ -294,6 +309,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
     }).then(function (r) { stage = '讀取設定'; return r.json(); }).then(function (j) {
       if (!j.ok) throw new Error(j.error || '載入失敗');
       renderItems(j.items);
+      applyStoreType(j.dept);
       $('meta').textContent = (j.account || '') + '　' + VER;
       show(null);
       $('form').style.display = 'flex';

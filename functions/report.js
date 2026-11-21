@@ -22,7 +22,10 @@ const STORES = {
   xinjuejiang: "高雄門市",
 };
 
-const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "送出時間", "Teams 帳號", "零用金小計", "零用金明細"];
+const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "送出時間", "Teams 帳號", "零用金小計", "零用金明細", "件數", "電子抵用券", "商品抵用券", "行動支付", "其他支付", "付款明細"];
+// 百貨店（付款多了抵用券、行動支付、其他支付；沒有單獨的 LINE Pay 欄）
+const DEPT = ["tongyi", "taoyuan", "xintiandi"];
+const PAY = [["cash", "現金"], ["card", "刷卡"], ["linepay", "LINE Pay"], ["voucherE", "電子抵用券"], ["voucherG", "商品抵用券"], ["mobile", "行動支付"], ["other", "其他"]];
 // 總部帳號：只有這兩個 Teams 帳號能用總部功能（目前是「發測試卡片」）
 const HQ = ["vvnyu@vvteam888.onmicrosoft.com", "biggaga0586@vvteam888.onmicrosoft.com"];
 const isHq = (account) => HQ.includes(String(account || "").toLowerCase());
@@ -105,8 +108,9 @@ function validate(b, today) {
   const who = String(b.who || "").trim().slice(0, 30);
   if (!who) errs.push("請填回報人");
   const f = {};
-  for (const k of ["cash", "card", "linepay"]) { f[k] = int(b[k], 100000000); if (Number.isNaN(f[k])) errs.push("金額不對"); }
+  for (const [k] of PAY) { f[k] = int(b[k], 100000000); if (Number.isNaN(f[k])) errs.push("金額不對"); }
   for (const k of ["mem", "non"]) { f[k] = int(b[k], 100000); if (Number.isNaN(f[k])) errs.push("來客數不對"); }
+  f.pieces = int(b.pieces, 100000); if (Number.isNaN(f.pieces)) errs.push("件數不對");
   const items = [];
   (Array.isArray(b.items) ? b.items : []).slice(0, 60).forEach((it) => {
     const name = String((it && it.name) || "").trim().slice(0, 120);
@@ -132,7 +136,7 @@ function validate(b, today) {
   if (!m) errs.push("請附日結畫面照片");
   else if (m[1].length > 6000000) errs.push("照片太大");
   if (errs.length) return { errs: [...new Set(errs)] };
-  const total = f.cash + f.card + f.linepay;
+  const total = PAY.reduce((a, [k]) => a + f[k], 0);
   const cust = f.mem + f.non;
   return {
     data: { store, date, who, ...f, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items, petty, pettySum: petty.reduce((a, p) => a + p.amount, 0) },
@@ -148,7 +152,14 @@ function pettyText(petty) {
   return (petty || []).map((p) => `${num(p.amount)}　${p.note}　${p.handler}`).join("\n");
 }
 function buildRow(d, photoUrl, stamp, account) {
-  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account, d.pettySum || 0, pettyText(d.petty)];
+  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account, d.pettySum || 0, pettyText(d.petty),
+    d.pieces || 0, d.voucherE || 0, d.voucherG || 0, d.mobile || 0, d.other || 0, ""];
+}
+// 付款那一行：街邊店固定列 現金／刷卡／LINE Pay；百貨店列它自己的欄位；金額是 0 的抵用券類不列
+function payText(d) {
+  const keys = DEPT.includes(d.store) ? ["cash", "card", "voucherE", "voucherG", "mobile", "other"] : ["cash", "card", "linepay"];
+  const always = ["cash", "card", "linepay", "mobile"];
+  return PAY.filter(([k]) => keys.includes(k) && (always.includes(k) || d[k] > 0)).map(([k, label]) => `${label} ${num(d[k] || 0)}`).join(" / ");
 }
 
 function buildCard(d, photoUrl, tag) {
@@ -157,9 +168,10 @@ function buildCard(d, photoUrl, tag) {
     { type: "TextBlock", text: `${shortDate(d.date)}　回報人 ${d.who}`, isSubtle: true, wrap: true, spacing: "Small" },
     { type: "FactSet", spacing: "Medium", facts: [
       { title: "總業績", value: money(d.total) },
-      { title: "付款", value: `現金 ${num(d.cash)} / 刷卡 ${num(d.card)} / LINE Pay ${num(d.linepay)}` },
+      { title: "付款", value: payText(d) },
       { title: "來客數", value: `${num(d.cust)}（會員 ${num(d.mem)} / 非會員 ${num(d.non)}）` },
       { title: "平均客單", value: d.cust > 0 ? money(d.avg) : "—" },
+      ...(d.pieces > 0 ? [{ title: "件數", value: num(d.pieces) }] : []),
     ] },
   ];
   if (d.items.length) {
@@ -199,8 +211,8 @@ function sheetsApi(GoogleAuth) {
 async function upsertRow(sheets, row) {
   const keys = await sheets.get("回報!A2:B");
   const idx = keys.findIndex((r) => cellDate(r[0]) === row[0] && String(r[1] || "").trim() === row[1]);
-  if (idx >= 0) { await sheets.update(`回報!A${idx + 2}:Q${idx + 2}`, row); return "updated"; }
-  await sheets.append("回報!A:Q", row);
+  if (idx >= 0) { await sheets.update(`回報!A${idx + 2}:W${idx + 2}`, row); return "updated"; }
+  await sheets.append("回報!A:W", row);
   return "added";
 }
 async function readItems(sheets) {
@@ -329,7 +341,7 @@ async function handle(req, res, deps) {
   const sheets = sheetsApi(GoogleAuth);
   try {
     if (req.method === "GET" && req.query.op === "config") {
-      return res.json({ ok: true, items: await readItems(sheets), account: user.account, name: user.name, hq: isHq(user.account) });
+      return res.json({ ok: true, items: await readItems(sheets), account: user.account, name: user.name, hq: isHq(user.account), dept: DEPT });
     }
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "不支援" });
 
@@ -340,7 +352,7 @@ async function handle(req, res, deps) {
       if (!STORES[store]) return res.status(400).json({ ok: false, error: "門市不對" });
       const hook = await readWebhook(sheets, store, GoogleAuth);
       if (!hook) return res.json({ ok: true, posted: false, reason: "找不到這間店的通知網址" });
-      const sample = { store, date: twNow().date, who: "測試", cash: 469, card: 33014, linepay: 31396, mem: 23, non: 1, total: 64879, cust: 24, avg: 2703,
+      const sample = { store, date: twNow().date, who: "測試", cash: 469, card: 33014, linepay: DEPT.includes(store) ? 0 : 31396, mobile: DEPT.includes(store) ? 31396 : 0, voucherE: 0, voucherG: 0, other: 0, pieces: 31, mem: 23, non: 1, total: 64879, cust: 24, avg: 2703,
         items: (await readItems(sheets)).map((it, i) => ({ ...it, qty: i % 2 })), petty: [{ amount: 120, note: "買垃圾袋", handler: "測試" }], pettySum: 120 };
       const r = await fetch(hook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildCard(sample, "", "測試")) });
       return res.json({ ok: true, posted: r.ok || r.status === 202, status: r.status });
@@ -372,5 +384,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };
