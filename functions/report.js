@@ -44,6 +44,14 @@ function shortDate(date) {
   return `${m}/${d}（${w}）`;
 }
 
+// 試算表的日期欄：程式寫入的是文字，但有人手動改過就會變成「日期序號」，兩種都要認得
+function cellDate(v) {
+  if (typeof v === "number" && v > 20000 && v < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000).toISOString().slice(0, 10);
+  const t = String(v === undefined || v === null ? "" : v).trim();
+  const m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(t);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : t;
+}
+
 // ---------- Teams 身分驗證（驗簽章、租用戶、對象、有效期） ----------
 let keyCache = { at: 0, keys: [] };
 async function msKeys(fetchFn = fetch) {
@@ -190,7 +198,7 @@ function sheetsApi(GoogleAuth) {
 // 同一間店同一天再送一次＝更新那一列，不會多出一列
 async function upsertRow(sheets, row) {
   const keys = await sheets.get("回報!A2:B");
-  const idx = keys.findIndex((r) => r[0] === row[0] && r[1] === row[1]);
+  const idx = keys.findIndex((r) => cellDate(r[0]) === row[0] && String(r[1] || "").trim() === row[1]);
   if (idx >= 0) { await sheets.update(`回報!A${idx + 2}:Q${idx + 2}`, row); return "updated"; }
   await sheets.append("回報!A:Q", row);
   return "added";
@@ -243,7 +251,7 @@ async function sendPhoto(admin, res, key) {
 
 // ---------- LINE：一天一則彙整（省額度），另外私訊「今日」隨時查（回覆不計額度） ----------
 function digestText(date, rows) {
-  const done = rows.filter((r) => r[0] === date);
+  const done = rows.filter((r) => cellDate(r[0]) === date).map((r) => { const c = r.slice(); c[1] = String(c[1] || "").trim(); return c; });
   const names = Object.values(STORES);
   const missing = names.filter((n) => !done.some((r) => r[1] === n));
   const n = (v) => Number(v) || 0;
@@ -364,5 +372,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, storeDbGet, isHq, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };
