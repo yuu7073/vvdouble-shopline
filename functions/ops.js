@@ -326,7 +326,11 @@ async function buildOpening(ctx, store, date, tag, open) {
   const lastDay = data.days[addDays(date, -7)];
   const st = stats7(data, date);
   // 順序：整理提醒 → 今天天氣／週末 → 服務技巧 → 近 7 天數據（最多 5 則）
-  const tips = [...contextTips(data, date), ...todayTips(w, date), serviceTip(st, data, date), ...coachTips(st).slice(0, 2)].slice(0, 5);
+  const coach = coachTips(st).slice(0, 2);
+  let svc = serviceTip(st, data, date);
+  // 數據建議已經在講試穿轉換時，服務技巧換一則別的，不重複
+  if (coach.some((t) => t.label === "近期試穿轉換偏低") && svc.label === SERVICE[0][0]) { const alt = SERVICE[1 + (dayNo(date) % (SERVICE.length - 1))]; svc = { label: alt[0], text: alt[1] }; }
+  const tips = [...contextTips(data, date), ...todayTips(w, date), svc, ...coach].slice(0, 5);
   return openingCard({ store, date, open, w, pg, last: lastDay && lastDay.sales > 0 ? lastDay : null, tips, tag });
 }
 async function postOpening(ctx, store, date, tag, open, hookOverride) {
@@ -344,8 +348,9 @@ async function sweepOpening(db, ctx, ts = Date.now()) {
   const mins = Number(now.stamp.slice(11, 13)) * 60 + Number(now.stamp.slice(14, 16));
   const cfg = await ctx.sheets.get("設定!A2:D");
   const on = cfg.filter((r) => String(r[3] || "").trim() === "開").map((r) => String(r[0] || "").trim()).filter((s) => R.STORES[s]);
-  if (!on.length) return [];
   const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
+  await quiet(ctx.sheets.put(`設定!E1:E${cfg.length + 1}`, [[`今日開門時間（${now.date}，${hours ? "含舊工具的調整" : "預設值"}）`], ...cfg.map((r) => [R.STORES[r[0]] ? openTime(r[0], now.date, hours) || "公休" : ""])]), "hours sheet");
+  if (!on.length) return [];
   const out = [];
   for (const store of on) {
     const open = openTime(store, now.date, hours);
