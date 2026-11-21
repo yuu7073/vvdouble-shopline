@@ -207,22 +207,70 @@ function todayTips(w, date) {
   return tips.slice(0, 2);
 }
 
+// 依日子給的整理提醒：週末結束後、新品到貨隔天
+function contextTips(data, date) {
+  const tips = [];
+  const y = data.days[addDays(date, -1)];
+  if (y && y.stock === "new") tips.push({ label: "新品上架隔天", text: "開門前把新品的線頭修乾淨、吊牌擺正，陳列照昨天賣的狀況調整，試穿過的掛回原位" });
+  if (dow(date) === 1) tips.push({ label: "週末結束後整理", text: "修剪線頭、整燙被試穿過的款式，補齊賣掉的尺寸，把週末賣得好的款式移到前面" });
+  return tips.slice(0, 1);
+}
+// 服務技巧：有數據就對症下藥，沒有就每天輪一則
+const SERVICE = [
+  ["試衣間對話", "客人從試衣間出來先問「哪裡喜歡、哪裡卡」，再遞上 2–3 件類似款或不同版型讓她比較，不要讓她空手走出來"],
+  ["先備好替代款", "客人進試衣間時，先在外面準備同類型不同顏色、不同長度的款式，她一出來就能接著試"],
+  ["多帶一件進試衣間", "客人拿上衣就多帶一件好搭的下身或外套，一起試才有整套的感覺"],
+  ["結帳前多問一句", "結帳前拿一件能搭她手上那件的單品問「這件配起來要不要看一下」"],
+  ["主動報尺寸", "看到客人翻吊牌就主動說有哪些尺寸、建議她穿哪一個，減少她自己猜"],
+];
+function serviceTip(st, data, date) {
+  const c = (o, k) => o[k] || 0;
+  if (st.days && c(st.try, "low") + c(st.try, "rare") >= 2) return { label: SERVICE[0][0], text: SERVICE[0][1] };
+  if (st.avgUpt !== null && st.avgUpt < 1.5) return { label: SERVICE[2][0], text: SERVICE[2][1] };
+  const [y, m, d] = date.split("-").map(Number);
+  const pick = SERVICE[Math.floor(Date.UTC(y, m - 1, d) / 86400000) % SERVICE.length];
+  return { label: pick[0], text: pick[1] };
+}
+// 進度條：用兩格不同底色的欄位拼出來（Teams 卡片沒有內建進度條）
+function barRow(label, pct, style) {
+  const p = Math.max(1, Math.min(99, Math.round(pct)));
+  const cell = (width, st) => ({ type: "Column", width, style: st, minHeight: "10px", items: [{ type: "TextBlock", text: " ", size: "Small", spacing: "None" }] });
+  return [
+    { type: "TextBlock", text: label, wrap: true, spacing: "Small", size: "Small" },
+    { type: "ColumnSet", spacing: "None", columns: pct >= 99.5 ? [cell(100, style)] : [cell(p, style), cell(100 - p, "emphasis")] },
+  ];
+}
+function progressBars(pg, date) {
+  if (!pg.monthTarget) return [];
+  const total = monthDays(date.slice(0, 7));
+  const passed = Number(date.slice(8)) - 1;
+  const timePct = Math.round((passed / total) * 1000) / 10;
+  const ahead = pg.rate >= timePct;
+  const gapDay = pg.paceTarget ? pg.cum - pg.paceTarget : null;
+  const out = [
+    { type: "TextBlock", text: "本月進度", weight: "Bolder", spacing: "Medium" },
+    ...barRow(`業績 ${pg.rate}%　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`, pg.rate, ahead ? "good" : "attention"),
+    ...barRow(`時間 ${timePct}%　已過 ${passed} 天 / ${total} 天`, timePct, "accent"),
+  ];
+  out.push({ type: "TextBlock", wrap: true, spacing: "Small", size: "Small", isSubtle: true, text: `${ahead ? "業績走在時間前面" : "業績落後時間進度"}${gapDay === null ? "" : `，比已過天數的目標${gapDay >= 0 ? "多" : "少"} ${R.money(Math.abs(gapDay))}`}` });
+  return out;
+}
+
 // ---------- 開店提醒卡片 ----------
 function openingCard(o) {
   const { store, date, open, w, pg, last, tips, tag } = o;
   const facts = [];
   if (w) facts.push({ title: "天氣", value: `${w.text}　${w.tmin}–${w.tmax}°C${w.pop !== null ? `　降雨機率 ${w.pop}%` : ""}` });
   if (pg.todayTarget) facts.push({ title: "今日目標", value: R.money(pg.todayTarget) });
-  if (pg.monthTarget) {
-    facts.push({ title: "本月進度", value: `${R.money(pg.cum)} / ${R.money(pg.monthTarget)}（${pg.rate}%）` });
-    if (pg.needPerDay !== null) facts.push({ title: "剩餘每日需", value: `${R.money(pg.needPerDay)}（剩 ${pg.daysLeft} 天）` });
-  } else if (pg.cum) facts.push({ title: "本月累計", value: R.money(pg.cum) });
+  if (pg.monthTarget) { if (pg.needPerDay !== null) facts.push({ title: "剩餘每日需", value: `${R.money(pg.needPerDay)}（剩 ${pg.daysLeft} 天）` }); }
+  else if (pg.cum) facts.push({ title: "本月累計", value: R.money(pg.cum) });
   if (last) facts.push({ title: "上週同日", value: `${R.money(last.sales)}　來客 ${last.customers}` });
   const body = [
     { type: "TextBlock", text: `${R.STORES[store]}　開店提醒${tag ? `（${tag}）` : ""}`, weight: "Bolder", size: "Medium", wrap: true },
     { type: "TextBlock", text: `${R.shortDate(date)}${open ? `　${open} 開門` : ""}`, isSubtle: true, spacing: "None", wrap: true },
   ];
   if (facts.length) body.push({ type: "FactSet", facts });
+  body.push(...progressBars(pg, date));
   if (tips.length) {
     body.push({ type: "TextBlock", text: "今日建議", weight: "Bolder", spacing: "Medium" });
     tips.forEach((t) => body.push({ type: "TextBlock", text: `**${t.label}**　${t.text}`, wrap: true, spacing: "Small" }));
@@ -233,8 +281,9 @@ async function buildOpening(ctx, store, date, tag, open) {
   const [data, w] = await Promise.all([loadStore(ctx, store, date), quiet(forecast(store, date), "forecast")]);
   const pg = progress(data, date);
   const lastDay = data.days[addDays(date, -7)];
-  let tips = [...todayTips(w, date), ...coachTips(stats7(data, date))].slice(0, 4);
-  if (!tips.length) tips = [{ label: "維持節奏", text: "照平常的服務節奏，主動招呼、完整搭配、結帳前多問一句" }];
+  const st = stats7(data, date);
+  // 順序：整理提醒 → 今天天氣／週末 → 服務技巧 → 近 7 天數據（最多 5 則）
+  const tips = [...contextTips(data, date), ...todayTips(w, date), serviceTip(st, data, date), ...coachTips(st).slice(0, 2)].slice(0, 5);
   return openingCard({ store, date, open, w, pg, last: lastDay && lastDay.sales > 0 ? lastDay : null, tips, tag });
 }
 async function postOpening(ctx, store, date, tag, open) {
@@ -321,9 +370,9 @@ async function previewOpening(ctx, store, date) {
   const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
   const card = await buildOpening(ctx, store, date, "", openTime(store, date, hours));
   const lines = [];
-  card.attachments[0].content.body.forEach((b) => { if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
+  card.attachments[0].content.body.forEach((b) => { if (b.type === "ColumnSet") return; if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
   await ctx.sheets.put(`開店提醒預覽!A1:A${lines.length + 1}`, [[`產生時間 ${R.twNow().stamp}`], ...lines.map((x) => [x])]);
   return lines.length;
 }
 
-module.exports = { oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
+module.exports = { contextTips, serviceTip, progressBars, oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
