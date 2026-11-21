@@ -403,7 +403,7 @@ async function handle(req, res, deps) {
   // 開店提醒卡片裡的進度條圖片（只有百分比，沒有門市與金額；Teams 讀圖不帶身分所以不驗證）
   if (req.method === "GET" && req.query.op === "bar") {
     res.set("Content-Type", "image/png"); res.set("Cache-Control", "public, max-age=86400");
-    return res.send(require("./ops").barPng(req.query.f, req.query.m, req.query.ok === "1"));
+    return res.send(require("./ops").barPng(req.query.f, req.query.m, req.query.ok === "1", req.query.solid === "1"));
   }
   if (req.method === "GET" && req.query.op === "photo") return sendPhoto(admin, res, req.query.k);
 

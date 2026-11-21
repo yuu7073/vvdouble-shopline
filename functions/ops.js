@@ -2,6 +2,7 @@
 // 資料 = 試算表（新的回報）＋ 門市營運中心資料庫（舊的日誌、目標、營業時間；唯讀）
 const R = require("./report");
 
+const BAR_URL = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/report?op=bar";
 const GEO = {
   zhongxiao: [25.041, 121.564], tongyi: [25.046, 121.516], taoyuan: [24.993, 121.301], yizhong: [24.146, 120.685],
   xinyizhong: [24.15, 120.683], xintiandi: [22.992, 120.213], xinjuejiang: [22.624, 120.302],
@@ -233,9 +234,9 @@ function serviceTip(st, data, date) {
 }
 // 進度條：後端畫成一張 PNG（Teams 卡片沒有內建進度條，用底色欄位拼的很醜）。
 // 圖只帶百分比，不含門市名稱與金額。fill＝業績進度，mark＝應有進度的直線，ok＝超前(綠)／落後(紅)
-function barPng(fill, mark, ok) {
+function barPng(fill, mark, ok, solid) {
   const zlib = require("zlib");
-  const W = 880, H = 36, r = H / 2;
+  const W = solid ? 8 : 880, H = solid ? 8 : 36, r = H / 2;
   const f = Math.max(0, Math.min(100, Number(fill) || 0)) / 100 * W;
   const m = mark === null || mark === undefined || mark === "" ? null : Math.max(0, Math.min(100, Number(mark) || 0)) / 100 * W;
   const col = ok ? [46, 158, 91] : [217, 83, 79];
@@ -250,6 +251,7 @@ function barPng(fill, mark, ok) {
   for (let y = 0; y < H; y++) {
     const o = y * (W * 4 + 1);
     for (let x = 0; x < W; x++) {
+      if (solid) { const q = o + 1 + x * 4; raw[q] = 255; raw[q + 1] = 214; raw[q + 2] = 64; raw[q + 3] = 255; continue; }
       const px = x + 0.5, py = y + 0.5, t = cover(px, py, W), c = Math.min(t, cover(px, py, f));
       // 軌道：半透明灰，深色淺色背景都看得到
       let R_ = 138, G_ = 143, B_ = 152, A = t * 0.38;
@@ -265,7 +267,6 @@ function barPng(fill, mark, ok) {
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]);
 }
-const BAR_URL = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/report?op=bar";
 function progressBars(pg, date) {
   if (!pg.monthTarget) return [];
   const head = heading("本月進度 📊");
@@ -291,12 +292,13 @@ const EMOJI = {
   "近期客單偏低": "💰", "近期客單亮眼": "💎", "近期客單穩定": "💰", "近期客件數偏低": "🛍️", "客件數可以加強": "🛍️", "搭配能力出色": "🌟",
   "近期試穿轉換偏低": "👗", "熱門商品常斷貨": "📦", "近期新品到貨多": "✨", "雨天多影響業績": "☔", "近期人潮偏少": "🚶", "人潮多但業績沒跟上": "⚡", "近期熱銷": "🔥", "維持節奏": "🌈",
 };
-const KAO = ["(ง •̀_•́)ง", "٩(ˊᗜˋ*)و", "(๑•̀ㅂ•́)و✧", "(*ˊᗜˋ*)/", "ᕦ(ò_óˇ)ᕤ", "(｡•̀ᴗ-)✧", "ヾ(＾∇＾)", "(≧▽≦)/", "(＾▽＾)b", "✧٩(ˊωˋ*)و✧"];
+const KAO = ["(≧▽≦)/", "(＾▽＾)b", "ヾ(＾∇＾)ノ", "(*´∀`*)", "o(≧▽≦)o", "(・∀・)b", "＼(^o^)／", "(｀・ω・´)ゞ", "(*^▽^*)", "ヽ(´▽`)ノ"];
 const HELLO = ["今天也一起加油", "開門囉，今天也要漂亮收班", "新的一天，衝一波", "準備好了嗎，開工", "今天的目標一起拿下", "笑著開門，笑著結帳", "今天也要讓客人美美地走出去"];
 const WX = { sunny: "☀️", cloudy: "⛅", rainy: "🌧️", storm: "⛈️" };
 const dayNo = (date) => { const [y, m, d] = date.split("-").map(Number); return Math.floor(Date.UTC(y, m - 1, d) / 86400000); };
 // 黃底粗體的段落標題
-const heading = (text, first) => ({ type: "Container", style: "warning", bleed: false, spacing: first ? "None" : "Medium", items: [{ type: "TextBlock", text, weight: "Bolder", wrap: true, size: first ? "Medium" : "Default" }] });
+const heading = (text, first) => ({ type: "Container", style: "warning", backgroundImage: { url: `${BAR_URL}&solid=1`, fillMode: "Repeat" }, spacing: first ? "None" : "Medium",
+  items: [{ type: "TextBlock", text, weight: "Bolder", color: "Dark", wrap: true, size: first ? "Medium" : "Default" }] });
 
 // ---------- 開店提醒卡片 ----------
 function openingCard(o) {
