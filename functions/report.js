@@ -196,11 +196,26 @@ async function readItems(sheets) {
   const rows = await sheets.get("滯銷品項!A2:B");
   return rows.map((r) => ({ series: String(r[0] || "").trim(), name: String(r[1] || "").trim() })).filter((r) => r.name);
 }
-async function readWebhook(sheets, store) {
-  const rows = await sheets.get("設定!A2:C");
-  const hit = rows.find((r) => r[0] === store);
-  const url = hit ? String(hit[2] || "").trim() : "";
-  return /^https:\/\//.test(url) ? url : "";
+// 各店聊天室的通知網址：存在門市營運中心的資料庫（已上鎖），後端用服務帳號讀，網址不經過任何頁面
+const STORE_DB = "https://vvdouble-store-default-rtdb.asia-southeast1.firebasedatabase.app";
+async function storeDbGet(GoogleAuth, path) {
+  const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/firebase.database", "https://www.googleapis.com/auth/userinfo.email"] });
+  const token = await auth.getAccessToken();
+  const r = await fetch(`${STORE_DB}${path}.json`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("讀門市資料庫失敗 " + r.status);
+  return r.json();
+}
+const okUrl = (u) => (/^https:\/\//.test(String(u || "").trim()) ? String(u).trim() : "");
+async function readWebhook(sheets, store, GoogleAuth) {
+  // 試算表「設定」分頁有填就以它為準，沒填才讀舊資料庫
+  try {
+    const rows = await sheets.get("設定!A2:C");
+    const hit = rows.find((r) => r[0] === store);
+    const u = okUrl(hit && hit[2]);
+    if (u) return u;
+  } catch (e) { console.error("report webhook sheet", e); }
+  if (!GoogleAuth || !STORES[store]) return "";
+  return okUrl(await storeDbGet(GoogleAuth, `/global/settings/teamsRouting/channels/${store}`));
 }
 
 // ---------- 照片（私人儲存；網址含一段猜不到的亂碼，只寫在試算表與該店聊天室） ----------
@@ -308,7 +323,7 @@ async function handle(req, res, deps) {
     // 貼到該店聊天室：失敗不影響回報本身（資料已經在試算表）
     let posted = false;
     try {
-      const hook = await readWebhook(sheets, v.data.store);
+      const hook = await readWebhook(sheets, v.data.store, GoogleAuth);
       if (hook) {
         const r = await fetch(hook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildCard(v.data, photoUrl)) });
         posted = r.ok || r.status === 202;
@@ -325,5 +340,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };

@@ -130,7 +130,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
   var items = [];
   var photoData = '';
   var busy = false;
-  var VER = 'v1.3';
+  var VER = 'v1.4';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -257,6 +257,7 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || '儲存失敗，請再試一次');
         show('ok', j.result === 'updated' ? '已更新今天的回報' : '已送出');
+        $('meta').textContent = VER + '　聊天室：' + (j.posted ? '已貼出' : '未貼出');
       })
       .catch(function (e) { show('err', (e && e.message) || '送出失敗，請再試一次'); })
       .then(function () { busy = false; $('send').disabled = false; $('send').textContent = '送出回報'; window.scrollTo(0, 0); });

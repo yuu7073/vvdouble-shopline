@@ -93,9 +93,19 @@ function splitText(text, size = 4500) {
   return out;
 }
 
-// ---------- 讀門市營運中心的資料庫（那邊本來就是公開讀） ----------
+// ---------- 讀門市營運中心的資料庫（已上鎖，用服務帳號讀） ----------
+let dbAuth = null;
+let tokenProvider = async () => {
+  if (!dbAuth) {
+    const { GoogleAuth } = require("google-auth-library");
+    dbAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/firebase.database", "https://www.googleapis.com/auth/userinfo.email"] });
+  }
+  return dbAuth.getAccessToken();
+};
+function setTokenProvider(fn) { tokenProvider = fn; }
 async function storeGet(path, query = "") {
-  const r = await fetch(`${STORE_DB}${path}.json${query ? "?" + query : ""}`);
+  const token = await tokenProvider();
+  const r = await fetch(`${STORE_DB}${path}.json${query ? "?" + query : ""}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error(`讀門市資料庫失敗 ${r.status} ${path}`);
   return r.json();
 }
@@ -202,4 +212,4 @@ async function handleLineEvent(db, ev) {
   return true;
 }
 
-module.exports = { STORES, isMonday, shiftDate, weekLabel, weekNumbers, formatWeekly, splitText, pushWeekly, sweepWeekly, handleLineEvent };
+module.exports = { STORES, isMonday, shiftDate, weekLabel, weekNumbers, formatWeekly, splitText, pushWeekly, sweepWeekly, handleLineEvent, setTokenProvider };
