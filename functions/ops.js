@@ -190,7 +190,7 @@ function coachTips(st) {
   if (rainy >= 3 && low) add(3, "雨天多影響業績", `近 7 天有 ${rainy} 天下雨，客流受影響，進店的每一位都要做完整服務`);
   if (c(st.crowd, "cold") >= 3 && low) add(3, "近期人潮偏少", `近 7 天有 ${c(st.crowd, "cold")} 天人潮冷清，今天主動招呼店外客人，進店客要留久一點`);
   const busy = c(st.crowd, "warm") + c(st.crowd, "full");
-  if (busy >= 4 && st.avgRate !== null && st.avgRate < 100) add(3, "人潮多但業績沒跟上", `近 7 天有 ${busy} 天人潮熱絡但沒達標，人手分配要更積極，結帳加快，別讓客人等`);
+  if (busy >= 4 && st.avgRate !== null && st.avgRate < 100) add(3, "人潮多但業績沒跟上", `近 7 天有 ${busy} 天人潮熱絡但沒達標，每位客人都先招呼到，結帳加快，別讓客人等`);
   const hot = Object.entries(st.hot).sort((a, b) => b[1] - a[1]);
   if (hot.length >= 2) add(4, "近期熱銷", `近 7 天賣得最好的是${hot.slice(0, 2).map(([k]) => R.OPTS.hot[k] || k).join("、")}，今天陳列和搭配推薦以這兩類為主`);
   return tips.sort((a, b) => a.priority - b.priority).slice(0, 3);
@@ -204,7 +204,7 @@ function todayTips(w, date) {
     else if (w.tmax >= 28) tips.push({ label: "今天偏熱", text: `最高 ${w.tmax}°C，短袖、輕薄款放前面，厚款改用「先買先備」的說法帶` });
     else if (w.tmax - w.tmin >= 8) tips.push({ label: "早晚溫差大", text: `${w.tmin}–${w.tmax}°C，主推薄外套、罩衫這類好疊穿的單品做連帶` });
   }
-  if ([5, 6, 0].includes(dow(date))) tips.push({ label: "週末人潮", text: "開門前先排好人力和試衣間動線，熱賣尺寸先補上架" });
+  if ([5, 6, 0].includes(dow(date))) tips.push({ label: "週末人潮", text: "開門前把熱賣尺寸補上架、試衣間整理好，客人多的時候先打招呼再輪流服務" });
   return tips.slice(0, 2);
 }
 
@@ -316,7 +316,7 @@ function openingCard(o) {
   body.push(...progressBars(pg, date));
   if (tips.length) {
     body.push(heading("今日建議 📝"));
-    tips.forEach((t, k) => body.push({ type: "TextBlock", text: `${EMOJI[t.label] || "👉"} **${t.label}**　${t.text} ${KAO[(n + k + 1) % KAO.length]}`, wrap: true, spacing: k ? "Small" : "Medium" }));
+    tips.forEach((t, k) => body.push({ type: "TextBlock", text: `${EMOJI[t.label] || "👉"} **${t.label}**　${t.text}`, wrap: true, spacing: k ? "Small" : "Medium" }));
   }
   return { type: "message", attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4", body } }] };
 }
