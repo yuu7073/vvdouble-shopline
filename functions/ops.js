@@ -345,6 +345,18 @@ async function postOpening(ctx, store, date, tag, open, hookOverride) {
   return { posted: r.ok, status: r.status };
 }
 // 排程每 5 分鐘跑一次：開門前 10 分鐘貼卡片，同一間同一天只貼一次。
+// 月目標同步到「目標」分頁 G:I 欄（門市／月份／月目標），給試算表的月總覽用；同一間同一個月只留一列
+async function syncMonthTargets(ctx, ym) {
+  const mt = await R.storeDbGet(ctx.GoogleAuth, `/global/monthlyTargets/${ym}`);
+  if (!mt || typeof mt !== "object") return 0;
+  const cur = (await ctx.sheets.get("目標!G2:I")).filter((r) => r[0]);
+  const key = (r) => `${String(r[0]).trim()}|${String(r[1]).trim()}`;
+  const map = new Map(cur.map((r) => [key(r), [String(r[0]).trim(), String(r[1]).trim(), n0(r[2])]]));
+  Object.keys(R.STORES).forEach((s) => { const v = n0(mt[s] && typeof mt[s] === "object" ? mt[s].target || mt[s].amount : mt[s]); if (v > 0) map.set(`${R.STORES[s]}|${ym}`, [R.STORES[s], ym, v]); });
+  const rows = [["門市", "月份", "月目標"], ...map.values()];
+  await ctx.sheets.put(`目標!G1:I${rows.length}`, rows);
+  return rows.length - 1;
+}
 // 哪幾間要貼：試算表「設定」分頁 D 欄填「開」的門市。
 async function sweepOpening(db, ctx, ts = Date.now()) {
   const now = R.twNow(ts);
@@ -353,6 +365,7 @@ async function sweepOpening(db, ctx, ts = Date.now()) {
   const on = cfg.filter((r) => String(r[3] || "").trim() === "開").map((r) => String(r[0] || "").trim()).filter((s) => R.STORES[s]);
   const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
   await quiet(ctx.sheets.put(`設定!E1:E${cfg.length + 1}`, [[`今日開門時間（${now.date}，${hours ? "含舊工具的調整" : "預設值"}）`], ...cfg.map((r) => [R.STORES[r[0]] ? openTime(r[0], now.date, hours) || "公休" : ""])]), "hours sheet");
+  await quiet(syncMonthTargets(ctx, now.date.slice(0, 7)), "month targets");
   if (!on.length) return [];
   const out = [];
   for (const store of on) {
@@ -427,4 +440,4 @@ async function previewOpening(ctx, store, date) {
   return lines.length;
 }
 
-module.exports = { barPng, contextTips, serviceTip, progressBars, oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
+module.exports = { syncMonthTargets, barPng, contextTips, serviceTip, progressBars, oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
