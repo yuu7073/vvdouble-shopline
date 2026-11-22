@@ -22,9 +22,17 @@ const STORES = {
   xinjuejiang: "高雄門市",
 };
 
-const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "零用金小計", "零用金明細", "件數", "電子抵用券", "商品抵用券", "行動支付", "其他支付", "付款明細",
+// 百貨店的行動支付／其他支付種類（沿用舊工具的清單再加三個）；「其他」可自己填名稱
+const PAY_OPTS = {
+  mobile: ["LINE PAY", "ICP", "悠遊付", "PAYEASY", "愛金卡", "Pi 錢包", "街口支付", "台灣 Pay"],
+  other: ["7-11 禮券", "商品禮券", "限定優惠券", "即享抵用券", "一點一元", "一點兩元", "點數活動", "其他"],
+};
+const OTHER_FIXED = PAY_OPTS.other.filter((x) => x !== "其他");
+// 行動支付、其他支付的每個種類各佔一欄，方便核對
+const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "件數", "電子抵用券", "商品抵用券",
+  "行動支付", ...PAY_OPTS.mobile.map((x) => `行動｜${x}`), "其他支付", ...OTHER_FIXED.map((x) => `其他｜${x}`), "其他｜自填金額", "其他｜自填名稱",
   "銷退金額", "銷退明細", "實際投庫", "投庫差額", "天氣", "人潮", "客群", "熱銷類別", "商品狀態", "試穿轉換", "現場補充", "特別狀況", "送出時間", "Teams 帳號"];
-const LAST_COL = "AI";
+const LAST_COL = "AW";
 // 現場狀況的選項（代號沿用舊的門市營運中心，試算表裡存中文）
 const OPTS = {
   crowd: { cold: "冷清", normal: "普通", warm: "熱絡", full: "爆滿" },
@@ -35,11 +43,6 @@ const OPTS = {
 };
 // 百貨店（付款多了抵用券、行動支付、其他支付；沒有單獨的 LINE Pay 欄）
 const DEPT = ["tongyi", "taoyuan", "xintiandi"];
-// 百貨店的行動支付／其他支付種類（沿用舊工具的清單）；「其他」可自己填名稱
-const PAY_OPTS = {
-  mobile: ["LINE PAY", "ICP", "悠遊付", "PAYEASY", "愛金卡", "Pi 錢包", "街口支付", "台灣 Pay"],
-  other: ["7-11 禮券", "商品禮券", "限定優惠券", "即享抵用券", "一點一元", "一點兩元", "點數活動", "其他"],
-};
 const PAY = [["cash", "現金"], ["card", "刷卡"], ["linepay", "LINE Pay"], ["voucherE", "電子抵用券"], ["voucherG", "商品抵用券"], ["mobile", "行動支付"], ["other", "其他"]];
 // 總部帳號：只有這兩個 Teams 帳號能用總部功能（目前是「發測試卡片」）
 const HQ = ["vvnyu@vvteam888.onmicrosoft.com", "biggaga0586@vvteam888.onmicrosoft.com"];
@@ -210,9 +213,17 @@ function itemsText(items) {
 function pettyText(petty) {
   return (petty || []).map((p) => `${num(p.amount)}　${p.note}　${p.handler}`).join("\n");
 }
+// 把付款明細攤到各種類的欄位：沒有的留空白
+function paySpread(d) {
+  const det = d.payDetail || { mobile: [], other: [] };
+  const sum = (list, key) => { const v = list.filter((x) => x.key === key).reduce((a, x) => a + x.amount, 0); return v || ""; };
+  const custom = (det.other || []).filter((x) => x.key === "其他");
+  return [d.mobile || 0, ...PAY_OPTS.mobile.map((k) => sum(det.mobile || [], k)), d.other || 0, ...OTHER_FIXED.map((k) => sum(det.other || [], k)),
+    custom.reduce((a, x) => a + x.amount, 0) || "", custom.map((x) => x.name).join("、")];
+}
 function buildRow(d, photoUrl, stamp, account) {
-  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, d.pettySum || 0, pettyText(d.petty),
-    d.pieces || 0, d.voucherE || 0, d.voucherG || 0, d.mobile || 0, d.other || 0, d.payDetailText || "",
+  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl,
+    d.pieces || 0, d.voucherE || 0, d.voucherG || 0, ...paySpread(d),
     d.returnSum || 0, (d.returns || []).map((r) => `${r.no}　${num(r.amount)}`).join("\n"),
     d.actualDeposit === null || d.actualDeposit === undefined ? "" : d.actualDeposit,
     d.depositDiff === null || d.depositDiff === undefined ? "" : d.depositDiff,
@@ -311,8 +322,6 @@ function pettyCat(note) {
   return best;
 }
 const pettyRows = (d, stamp) => (d.petty || []).map((p) => [d.date, d.date.slice(0, 7), STORES[d.store], p.amount, pettyCat(p.note), p.note, p.handler, d.who, stamp]);
-// 付款明細（百貨店的行動支付／其他支付）也攤平成一筆一列
-const payRows = (d, stamp) => ["mobile", "other"].flatMap((t) => ((d.payDetail || {})[t] || []).map((x) => [d.date, d.date.slice(0, 7), STORES[d.store], t === "mobile" ? "行動支付" : "其他支付", x.key === "其他" ? x.name : x.key, x.amount, d.who, stamp]));
 // 同一天同一間重送時，先蓋掉原本那幾列；多的往下加，少的清空（不整頁重寫，避免七間同時送出互相蓋掉）
 async function syncTab(sheets, tab, lastCol, d, rows) {
   const all = await sheets.get(`${tab}!A2:C`);
@@ -325,7 +334,6 @@ async function syncTab(sheets, tab, lastCol, d, rows) {
   return rows.length;
 }
 const syncPetty = (sheets, d, stamp) => syncTab(sheets, "零用金", "I", d, pettyRows(d, stamp));
-const syncPay = (sheets, d, stamp) => syncTab(sheets, "付款明細", "H", d, payRows(d, stamp));
 async function upsertRow(sheets, row) {
   const keys = await sheets.get("回報!A2:B");
   const idx = keys.findIndex((r) => cellDate(r[0]) === row[0] && String(r[1] || "").trim() === row[1]);
@@ -525,7 +533,6 @@ async function handle(req, res, deps) {
       }
     } catch (e) { console.error("report photo link", e); }
     try { await syncPetty(sheets, v.data, stamp); } catch (e) { console.error("report petty", e); }
-    try { await syncPay(sheets, v.data, stamp); } catch (e) { console.error("report paydetail", e); }
 
     // 貼到該店聊天室：失敗不影響回報本身（資料已經在試算表）
     let posted = false;
@@ -547,5 +554,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, PAY_OPTS, pettyCat, pettyRows, syncPetty, payRows, syncPay, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, PAY_OPTS, pettyCat, pettyRows, syncPetty, paySpread, OTHER_FIXED, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };
