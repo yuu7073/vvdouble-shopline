@@ -22,8 +22,8 @@ const STORES = {
   xinjuejiang: "高雄門市",
 };
 
-const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "送出時間", "Teams 帳號", "零用金小計", "零用金明細", "件數", "電子抵用券", "商品抵用券", "行動支付", "其他支付", "付款明細",
-  "銷退金額", "銷退明細", "實際投庫", "投庫差額", "天氣", "人潮", "客群", "熱銷類別", "商品狀態", "試穿轉換", "現場補充", "特別狀況"];
+const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "零用金小計", "零用金明細", "件數", "電子抵用券", "商品抵用券", "行動支付", "其他支付", "付款明細",
+  "銷退金額", "銷退明細", "實際投庫", "投庫差額", "天氣", "人潮", "客群", "熱銷類別", "商品狀態", "試穿轉換", "現場補充", "特別狀況", "送出時間", "Teams 帳號"];
 const LAST_COL = "AI";
 // 現場狀況的選項（代號沿用舊的門市營運中心，試算表裡存中文）
 const OPTS = {
@@ -211,13 +211,13 @@ function pettyText(petty) {
   return (petty || []).map((p) => `${num(p.amount)}　${p.note}　${p.handler}`).join("\n");
 }
 function buildRow(d, photoUrl, stamp, account) {
-  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account, d.pettySum || 0, pettyText(d.petty),
+  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, d.pettySum || 0, pettyText(d.petty),
     d.pieces || 0, d.voucherE || 0, d.voucherG || 0, d.mobile || 0, d.other || 0, d.payDetailText || "",
     d.returnSum || 0, (d.returns || []).map((r) => `${r.no}　${num(r.amount)}`).join("\n"),
     d.actualDeposit === null || d.actualDeposit === undefined ? "" : d.actualDeposit,
     d.depositDiff === null || d.depositDiff === undefined ? "" : d.depositDiff,
     d.weather || "", OPTS.crowd[d.crowd] || "", OPTS.customer[d.customer] || "", (d.hot || []).map((h) => OPTS.hot[h]).join("、"),
-    OPTS.stock[d.stock] || "", OPTS.tryc[d.tryc] || "", d.sceneNote || "", d.specialNote || ""];
+    OPTS.stock[d.stock] || "", OPTS.tryc[d.tryc] || "", d.sceneNote || "", d.specialNote || "", stamp, account];
 }
 function sceneText(d) {
   const parts = [];
@@ -294,6 +294,8 @@ function sheetsApi(GoogleAuth) {
   return {
     get: (range) => call(`/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`).then((d) => d.values || []),
     update: (range, row) => call(`/values/${encodeURIComponent(range)}?valueInputOption=RAW`, { method: "PUT", data: { values: [row] } }),
+    // 只給後端自己組的公式用（照片連結）；使用者輸入的內容一律走 RAW，不會被當成公式
+    formula: (range, f) => call(`/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, { method: "PUT", data: { values: [[f]] } }),
     put: (range, rows) => call(`/values/${encodeURIComponent(range)}?valueInputOption=RAW`, { method: "PUT", data: { values: rows } }),
     appendRows: (range, rows) => call(`/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: "POST", data: { values: rows } }),
     append: (range, row) => call(`/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: "POST", data: { values: [row] } }),
@@ -514,6 +516,14 @@ async function handle(req, res, deps) {
     const photoUrl = await savePhoto(admin, v.photoB64);
     const stamp = twNow().stamp;
     const result = await upsertRow(sheets, buildRow(v.data, photoUrl, stamp, user.account));
+    // 照片欄只顯示「連結」兩個字，點了開照片（網址是後端產生的，不含使用者輸入）
+    try {
+      if (/^https:\/\/[a-z0-9.\-]+\/report\?op=photo&k=[0-9a-f]+$/.test(photoUrl)) {
+        const keys = await sheets.get("回報!A2:B");
+        const at = keys.findIndex((r) => cellDate(r[0]) === v.data.date && String(r[1] || "").trim() === STORES[v.data.store]);
+        if (at >= 0) await sheets.formula(`回報!M${at + 2}`, `=HYPERLINK("${photoUrl}","連結")`);
+      }
+    } catch (e) { console.error("report photo link", e); }
     try { await syncPetty(sheets, v.data, stamp); } catch (e) { console.error("report petty", e); }
     try { await syncPay(sheets, v.data, stamp); } catch (e) { console.error("report paydetail", e); }
 

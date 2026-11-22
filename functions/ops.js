@@ -59,12 +59,12 @@ async function forecast(store, date, fetchFn = fetch) {
 // ---------- 歷史資料：舊日誌 ＋ 試算表（同一天以試算表為準） ----------
 const rev = (group) => Object.fromEntries(Object.entries(R.OPTS[group]).map(([k, v]) => [v, k]));
 function sheetDay(r) {
-  const w = String(r[27] || "");
+  const w = String(r[25] || "");
   return {
-    sales: n0(r[3]), customers: n0(r[7]), items: n0(r[17]),
+    sales: n0(r[3]), customers: n0(r[7]), items: n0(r[15]),
     weather: /雷/.test(w) ? "storm" : /雨/.test(w) ? "rainy" : w ? "other" : "",
-    crowd: rev("crowd")[String(r[28] || "")] || "", stock: rev("stock")[String(r[31] || "")] || "", tryc: rev("tryc")[String(r[32] || "")] || "",
-    hot: String(r[30] || "").split("、").map((x) => rev("hot")[x]).filter(Boolean),
+    crowd: rev("crowd")[String(r[26] || "")] || "", stock: rev("stock")[String(r[29] || "")] || "", tryc: rev("tryc")[String(r[30] || "")] || "",
+    hot: String(r[28] || "").split("、").map((x) => rev("hot")[x]).filter(Boolean),
   };
 }
 function oldDay(l) {
@@ -386,11 +386,11 @@ function oldRow(store, date, l) {
   const supp = [["人潮", l.crowdSupp], ["客群", l.customerSupp], ["熱銷", l.hotSupp], ["商品", l.stockSupp], ["試穿", l.trySupp]].filter(([, v]) => v).map(([k, v]) => `${k}：${v}`).join("；");
   const blank = (v) => (v === null || v === undefined || v === "" ? "" : n0(v));
   return [date, R.STORES[store], l._firstSubmittedBy || l._modifiedBy || "", n0(l.sales), n0(pay.cash), n0(pay.card), n0(pay.linePay), cust, n0(l.memberCount), n0(l.nonMemberCount),
-    cust > 0 ? Math.round(n0(l.sales) / cust) : 0, "", "", ts ? R.twNow(ts).stamp : "", l.submitted ? "舊工具匯入" : "舊工具匯入（未送出）",
+    cust > 0 ? Math.round(n0(l.sales) / cust) : 0, "", "",
     petty.reduce((a, x) => a + n0(x && x.amount), 0), petty.map((x) => `${R.num(n0(x.amount))}　${x.note || ""}　${x.handler || ""}`).join("\n"),
     n0(l.items), n0(pay.voucherE), n0(pay.voucherG), sum(pay.mobile), sum(pay.other), detail,
     0, "", blank(cc.actual), blank(cc.diff), wt, R.OPTS.crowd[l.crowd] || "", R.OPTS.customer[l.customerType] || "",
-    arr(l.hotCategories).map((h) => R.OPTS.hot[h]).filter(Boolean).join("、"), R.OPTS.stock[l.stockStatus] || "", R.OPTS.tryc[l.tryConversion] || "", supp, l.specialNote || ""];
+    arr(l.hotCategories).map((h) => R.OPTS.hot[h]).filter(Boolean).join("、"), R.OPTS.stock[l.stockStatus] || "", R.OPTS.tryc[l.tryConversion] || "", supp, l.specialNote || "", ts ? R.twNow(ts).stamp : "", l.submitted ? "舊工具匯入" : "舊工具匯入（未送出）"];
 }
 async function importOld(ctx, ym) {
   const ids = Object.keys(R.STORES);
