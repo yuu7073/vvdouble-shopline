@@ -29,10 +29,10 @@ const PAY_OPTS = {
 };
 const OTHER_FIXED = PAY_OPTS.other.filter((x) => x !== "其他");
 // 行動支付、其他支付的每個種類各佔一欄，方便核對
-const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "滯銷", "照片", "件數", "電子抵用券", "商品抵用券",
+const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "照片", "件數", "電子抵用券", "商品抵用券",
   "行動支付", ...PAY_OPTS.mobile.map((x) => `行動｜${x}`), "其他支付", ...OTHER_FIXED.map((x) => `其他｜${x}`), "其他｜自填金額", "其他｜自填名稱",
   "銷退金額", "銷退明細", "實際投庫", "投庫差額", "天氣", "人潮", "客群", "熱銷類別", "商品狀態", "試穿轉換", "現場補充", "特別狀況", "送出時間", "Teams 帳號"];
-const LAST_COL = "AW";
+const LAST_COL = "AV";
 // 現場狀況的選項（代號沿用舊的門市營運中心，試算表裡存中文）
 const OPTS = {
   crowd: { cold: "冷清", normal: "普通", warm: "熱絡", full: "爆滿" },
@@ -222,7 +222,7 @@ function paySpread(d) {
     custom.reduce((a, x) => a + x.amount, 0) || "", custom.map((x) => `${x.name} ${num(x.amount)}`).join("、")];
 }
 function buildRow(d, photoUrl, stamp, account) {
-  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl,
+  return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, photoUrl,
     d.pieces || 0, d.voucherE || 0, d.voucherG || 0, ...paySpread(d),
     d.returnSum || 0, (d.returns || []).map((r) => `${r.no}　${num(r.amount)}`).join("\n"),
     d.actualDeposit === null || d.actualDeposit === undefined ? "" : d.actualDeposit,
@@ -333,6 +333,9 @@ async function syncTab(sheets, tab, lastCol, d, rows) {
   if (rows.length > old.length) await sheets.appendRows(`${tab}!A:${lastCol}`, rows.slice(old.length));
   return rows.length;
 }
+// 滯銷回報也攤平成一筆一列（每個品項一列）
+const slowRows = (d, stamp) => (d.items || []).map((it) => [d.date, d.date.slice(0, 7), STORES[d.store], it.series || "", it.name, it.qty, d.who, stamp]);
+const syncSlow = (sheets, d, stamp) => syncTab(sheets, "滯銷回報", "H", d, slowRows(d, stamp));
 const syncPetty = (sheets, d, stamp) => syncTab(sheets, "零用金", "I", d, pettyRows(d, stamp));
 async function upsertRow(sheets, row) {
   const keys = await sheets.get("回報!A2:B");
@@ -529,10 +532,11 @@ async function handle(req, res, deps) {
       if (/^https:\/\/[a-z0-9.\-]+\/report\?op=photo&k=[0-9a-f]+$/.test(photoUrl)) {
         const keys = await sheets.get("回報!A2:B");
         const at = keys.findIndex((r) => cellDate(r[0]) === v.data.date && String(r[1] || "").trim() === STORES[v.data.store]);
-        if (at >= 0) await sheets.formula(`回報!M${at + 2}`, `=HYPERLINK("${photoUrl}","連結")`);
+        if (at >= 0) await sheets.formula(`回報!L${at + 2}`, `=HYPERLINK("${photoUrl}","連結")`);
       }
     } catch (e) { console.error("report photo link", e); }
     try { await syncPetty(sheets, v.data, stamp); } catch (e) { console.error("report petty", e); }
+    try { await syncSlow(sheets, v.data, stamp); } catch (e) { console.error("report slow", e); }
 
     // 貼到該店聊天室：失敗不影響回報本身（資料已經在試算表）
     let posted = false;
@@ -554,5 +558,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, PAY_OPTS, pettyCat, pettyRows, syncPetty, paySpread, OTHER_FIXED, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, PAY_OPTS, pettyCat, pettyRows, syncPetty, slowRows, syncSlow, paySpread, OTHER_FIXED, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };

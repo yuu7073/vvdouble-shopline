@@ -59,12 +59,12 @@ async function forecast(store, date, fetchFn = fetch) {
 // ---------- 歷史資料：舊日誌 ＋ 試算表（同一天以試算表為準） ----------
 const rev = (group) => Object.fromEntries(Object.entries(R.OPTS[group]).map(([k, v]) => [v, k]));
 function sheetDay(r) {
-  const w = String(r[39] || "");
+  const w = String(r[38] || "");
   return {
-    sales: n0(r[3]), customers: n0(r[7]), items: n0(r[13]),
+    sales: n0(r[3]), customers: n0(r[7]), items: n0(r[12]),
     weather: /雷/.test(w) ? "storm" : /雨/.test(w) ? "rainy" : w ? "other" : "",
-    crowd: rev("crowd")[String(r[40] || "")] || "", stock: rev("stock")[String(r[43] || "")] || "", tryc: rev("tryc")[String(r[44] || "")] || "",
-    hot: String(r[42] || "").split("、").map((x) => rev("hot")[x]).filter(Boolean),
+    crowd: rev("crowd")[String(r[39] || "")] || "", stock: rev("stock")[String(r[42] || "")] || "", tryc: rev("tryc")[String(r[43] || "")] || "",
+    hot: String(r[41] || "").split("、").map((x) => rev("hot")[x]).filter(Boolean),
   };
 }
 function oldDay(l) {
@@ -386,7 +386,7 @@ function oldRow(store, date, l) {
   const supp = [["人潮", l.crowdSupp], ["客群", l.customerSupp], ["熱銷", l.hotSupp], ["商品", l.stockSupp], ["試穿", l.trySupp]].filter(([, v]) => v).map(([k, v]) => `${k}：${v}`).join("；");
   const blank = (v) => (v === null || v === undefined || v === "" ? "" : n0(v));
   return [date, R.STORES[store], l._firstSubmittedBy || l._modifiedBy || "", n0(l.sales), n0(pay.cash), n0(pay.card), n0(pay.linePay), cust, n0(l.memberCount), n0(l.nonMemberCount),
-    cust > 0 ? Math.round(n0(l.sales) / cust) : 0, "", "",
+    cust > 0 ? Math.round(n0(l.sales) / cust) : 0, "",
     n0(l.items), n0(pay.voucherE), n0(pay.voucherG), ...R.paySpread({ mobile: sum(pay.mobile), other: sum(pay.other), payDetail: {
       mobile: arr(pay.mobile).map((x) => ({ key: R.PAY_OPTS.mobile.includes(x.key) ? x.key : "", amount: n0(x.amount) })),
       other: arr(pay.other).map((x) => (R.OTHER_FIXED.includes(x.key) ? { key: x.key, amount: n0(x.amount) } : { key: "其他", name: x.customName || x.key || "", amount: n0(x.amount) })) } }),
