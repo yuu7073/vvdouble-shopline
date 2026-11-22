@@ -50,6 +50,15 @@ button.ghost{font-family:inherit;align-self:flex-start;height:40px;padding:0 14p
 @media (max-width:520px){.prow{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px}.prow .p-note{grid-column:1 / -1;grid-row:1}}
 .rrow{display:grid;grid-template-columns:minmax(0,1fr) 110px 40px;gap:8px;align-items:center}
 .rrow input{width:100%;min-width:0}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) 110px 40px;gap:8px;align-items:center}
+.prow .pk{display:flex;gap:6px;min-width:0}
+.prow select,.prow input{font-family:inherit;width:100%;min-width:0;height:40px;border:1px solid #D5D9E0;border-radius:8px;padding:0 8px;font-size:16px;color:#1F2430;background:#fff}
+.prow .p-amt{text-align:right}
+@media (min-width:600px){.prow select,.prow input{font-size:13.5px}}
+.prow button{font-family:inherit;height:40px;border:1px solid #D5D9E0;border-radius:8px;background:#fff;color:#5B6472;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.plist{display:flex;flex-direction:column;gap:8px}
+.pblock{display:flex;flex-direction:column;gap:8px}
+.pblock .ph{display:flex;justify-content:space-between;align-items:baseline;color:#5B6472}
 .rrow button{font-family:inherit;height:40px;border:1px solid #D5D9E0;border-radius:8px;background:#fff;color:#5B6472;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips button{font-family:inherit;font-size:12.5px;min-height:34px;padding:0 13px;border:0;border-radius:999px;background:#EEF0F3;color:#1F2430;cursor:pointer}
@@ -105,8 +114,16 @@ table.t th:first-child,table.t td:first-child{text-align:left}
       <div class="row money" data-street><label for="linepay">LINE Pay</label><input type="text" inputmode="numeric" id="linepay" data-n></div>
       <div class="row money" data-dept><label for="voucherE">電子抵用券</label><input type="text" inputmode="numeric" id="voucherE" data-n></div>
       <div class="row money" data-dept><label for="voucherG">商品抵用券</label><input type="text" inputmode="numeric" id="voucherG" data-n></div>
-      <div class="row money" data-dept><label for="mobile">行動支付</label><input type="text" inputmode="numeric" id="mobile" data-n></div>
-      <div class="row money" data-dept><label for="other">其他支付</label><input type="text" inputmode="numeric" id="other" data-n></div>
+      <div class="pblock" data-deptblock>
+        <div class="ph"><span>行動支付</span><b class="num" id="mobileSum">$0</b></div>
+        <div class="plist" id="mobileList"></div>
+        <button class="ghost" type="button" id="mobileAdd">新增行動支付</button>
+      </div>
+      <div class="pblock" data-deptblock>
+        <div class="ph"><span>其他支付</span><b class="num" id="otherSum">$0</b></div>
+        <div class="plist" id="otherList"></div>
+        <button class="ghost" type="button" id="otherAdd">新增其他支付</button>
+      </div>
     </div>
 
     <div class="card">
@@ -197,15 +214,18 @@ table.t th:first-child,table.t td:first-child{text-align:left}
   var items = [];
   var photoData = '';
   var busy = false;
-  var PAYKEYS = ['cash', 'card', 'linepay', 'voucherE', 'voucherG', 'mobile', 'other'];
+  var PAYKEYS = ['cash', 'card', 'linepay', 'voucherE', 'voucherG'];
+  var PAY_OPTS = { mobile: ['LINE PAY', 'ICP', '悠遊付', 'PAYEASY', '愛金卡', 'Pi 錢包', '街口支付', '台灣 Pay'], other: ['7-11 禮券', '商品禮券', '限定優惠券', '即享抵用券', '一點一元', '一點兩元', '點數活動', '其他'] };
   var DEPT_DEFAULT = ['tongyi', 'taoyuan', 'xintiandi'];
   // 依門市類型顯示付款欄位（先用內建名單畫，載入設定後以後端名單為準）
   function applyStoreType(list) {
     var dept = (list || DEPT_DEFAULT).indexOf(store) >= 0;
     Array.prototype.forEach.call(document.querySelectorAll('[data-dept]'), function (el) { el.style.display = dept ? 'flex' : 'none'; if (!dept) el.querySelector('input').value = ''; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-deptblock]'), function (el) { el.style.display = dept ? 'flex' : 'none'; if (!dept) { el.querySelector('.plist').textContent = ''; } });
+    paySum();
     Array.prototype.forEach.call(document.querySelectorAll('[data-street]'), function (el) { el.style.display = dept ? 'none' : 'flex'; if (dept) el.querySelector('input').value = ''; });
   }
-  var VER = 'v1.8';
+  var VER = 'v1.9';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -220,7 +240,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
 
   // 只改數字顯示的文字，不重畫輸入框，所以打字不會跳掉
   function recalc() {
-    var total = PAYKEYS.reduce(function (a, k) { return a + n($(k)); }, 0);
+    var total = PAYKEYS.reduce(function (a, k) { return a + n($(k)); }, 0) + listSum('mobile') + listSum('other');
     var cust = n($('mem')) + n($('non'));
     $('total').textContent = money(total);
     $('sumDaily').textContent = money(total);
@@ -237,6 +257,42 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     var d = n($('deposit')) - exp;
     el.textContent = d === 0 ? '$0' : (d > 0 ? '+' : '-') + money(Math.abs(d));
     el.className = d === 0 ? '' : (d > 0 ? 'pos' : 'neg');
+  }
+  // 百貨店的行動支付／其他支付：一筆一列，選種類＋金額；只增刪那一列，不重畫
+  function listSum(t) {
+    var sum = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('#' + t + 'List .p-amt'), function (a) { sum += n(a); });
+    return sum;
+  }
+  function paySum() {
+    ['mobile', 'other'].forEach(function (t) { $(t + 'Sum').textContent = money(listSum(t)); });
+    recalc();
+  }
+  function addPay(t) {
+    var row = document.createElement('div'); row.className = 'prow';
+    var wrap = document.createElement('div'); wrap.className = 'pk';
+    var sel = document.createElement('select'); sel.className = 'p-key'; sel.setAttribute('aria-label', (t === 'mobile' ? '行動支付' : '其他支付') + '種類');
+    var first = document.createElement('option'); first.value = ''; first.textContent = '選擇種類'; sel.appendChild(first);
+    PAY_OPTS[t].forEach(function (o) { var op = document.createElement('option'); op.value = o; op.textContent = o === '其他' ? '其他（自己填名稱）' : o; sel.appendChild(op); });
+    var name = document.createElement('input'); name.type = 'text'; name.className = 'p-name'; name.placeholder = '名稱'; name.maxLength = 20; name.autocomplete = 'off'; name.setAttribute('aria-label', '其他支付名稱'); name.style.display = 'none';
+    sel.addEventListener('change', function () { var c = sel.value === '其他'; name.style.display = c ? 'block' : 'none'; if (!c) name.value = ''; else name.focus(); });
+    var amt = document.createElement('input'); amt.type = 'text'; amt.className = 'p-amt'; amt.placeholder = '金額'; amt.inputMode = 'numeric'; amt.setAttribute('aria-label', '金額');
+    amt.addEventListener('input', function () { var c = amt.value.replace(/\D/g, ''); if (c !== amt.value) amt.value = c; paySum(); });
+    var del = document.createElement('button'); del.type = 'button'; del.setAttribute('aria-label', '刪除這一筆'); del.innerHTML = X_SVG;
+    del.addEventListener('click', function () { row.remove(); paySum(); });
+    wrap.appendChild(sel); wrap.appendChild(name);
+    row.appendChild(wrap); row.appendChild(amt); row.appendChild(del);
+    $(t + 'List').appendChild(row);
+    sel.focus();
+  }
+  function collectPay() {
+    var out = [];
+    ['mobile', 'other'].forEach(function (t) {
+      Array.prototype.forEach.call(document.querySelectorAll('#' + t + 'List .prow'), function (r) {
+        out.push({ type: t, key: r.querySelector('.p-key').value, name: r.querySelector('.p-name').value.trim(), amount: n(r.querySelector('.p-amt')) });
+      });
+    });
+    return out;
   }
   function bindNumber(el, calc) {
     el.addEventListener('input', function () {
@@ -289,6 +345,8 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     no.focus();
   }
   $('retAdd').addEventListener('click', addRet);
+  $('mobileAdd').addEventListener('click', function () { addPay('mobile'); });
+  $('otherAdd').addEventListener('click', function () { addPay('other'); });
   function collectRets() {
     return Array.prototype.map.call(document.querySelectorAll('#rets .rrow'), function (r) {
       return { no: r.querySelector('.r-no').value.trim(), amount: n(r.querySelector('.r-amt')) };
@@ -391,10 +449,13 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     if (badPetty) { document.querySelectorAll('details.sec')[1].open = true; show('err', '零用金每筆要填金額、用途、經手人'); window.scrollTo(0, 0); return; }
     var rets = collectRets();
     if (rets.some(function (r) { return (r.no || r.amount) && (!r.no || !r.amount); })) { show('err', '銷退每筆要填單號和金額'); window.scrollTo(0, 0); return; }
+    var pays = collectPay().filter(function (x) { return x.key || x.amount; });
+    if (pays.some(function (x) { return !x.key || !x.amount; })) { show('err', '行動支付、其他支付每筆要選種類和填金額'); window.scrollTo(0, 0); return; }
+    if (pays.some(function (x) { return x.key === '其他' && !x.name; })) { show('err', '其他支付選「其他」時要填名稱'); window.scrollTo(0, 0); return; }
     if (!photoData) { show('err', '請附日結畫面照片'); window.scrollTo(0, 0); return; }
     var body = {
       store: store, date: $('date').value, who: who,
-      cash: n($('cash')), card: n($('card')), linepay: n($('linepay')), voucherE: n($('voucherE')), voucherG: n($('voucherG')), mobile: n($('mobile')), other: n($('other')),
+      cash: n($('cash')), card: n($('card')), linepay: n($('linepay')), voucherE: n($('voucherE')), voucherG: n($('voucherG')), mobile: listSum('mobile'), other: listSum('other'), payDetail: pays,
       mem: n($('mem')), non: n($('non')), pieces: n($('pieces')),
       items: items.map(function (it, i) { return { series: it.series, name: it.name, qty: n($('q' + i)) }; }),
       petty: petty,
@@ -519,6 +580,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     }).then(function (r) { stage = '讀取設定'; return r.json(); }).then(function (j) {
       if (!j.ok) throw new Error(j.error || '載入失敗');
       renderItems(j.items);
+      if (j.payOpts && j.payOpts.mobile && j.payOpts.other) PAY_OPTS = j.payOpts;
       applyStoreType(j.dept);
       $('meta').textContent = (j.account || '') + '　' + VER;
       show(null);

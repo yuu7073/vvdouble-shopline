@@ -35,6 +35,11 @@ const OPTS = {
 };
 // 百貨店（付款多了抵用券、行動支付、其他支付；沒有單獨的 LINE Pay 欄）
 const DEPT = ["tongyi", "taoyuan", "xintiandi"];
+// 百貨店的行動支付／其他支付種類（沿用舊工具的清單）；「其他」可自己填名稱
+const PAY_OPTS = {
+  mobile: ["LINE PAY", "ICP", "悠遊付", "PAYEASY", "愛金卡", "Pi 錢包", "街口支付", "台灣 Pay"],
+  other: ["7-11 禮券", "商品禮券", "限定優惠券", "即享抵用券", "一點一元", "一點兩元", "點數活動", "其他"],
+};
 const PAY = [["cash", "現金"], ["card", "刷卡"], ["linepay", "LINE Pay"], ["voucherE", "電子抵用券"], ["voucherG", "商品抵用券"], ["mobile", "行動支付"], ["other", "其他"]];
 // 總部帳號：只有這兩個 Teams 帳號能用總部功能（目前是「發測試卡片」）
 const HQ = ["vvnyu@vvteam888.onmicrosoft.com", "biggaga0586@vvteam888.onmicrosoft.com"];
@@ -119,6 +124,23 @@ function validate(b, today) {
   if (!who) errs.push("請填回報人");
   const f = {};
   for (const [k] of PAY) { f[k] = int(b[k], 100000000); if (Number.isNaN(f[k])) errs.push("金額不對"); }
+  // 付款明細（百貨店）：有明細就以明細加總為準，種類只收名單內的
+  const detail = { mobile: [], other: [] };
+  (Array.isArray(b.payDetail) ? b.payDetail : []).slice(0, 40).forEach((it) => {
+    const type = it && it.type;
+    if (!detail[type]) return;
+    const key = String(it.key || ""), raw = it.amount;
+    const empty = raw === "" || raw === null || raw === undefined || Number(raw) === 0;
+    if (!key && empty) return;
+    const amount = int(raw, 100000000);
+    const name = String(it.name || "").replace(/[\r\n、；]/g, " ").trim().slice(0, 20);
+    if (!PAY_OPTS[type].includes(key) || Number.isNaN(amount) || amount <= 0) { errs.push(`${type === "mobile" ? "行動支付" : "其他支付"}每筆要選種類和填金額`); return; }
+    if (key === "其他" && !name) { errs.push("其他支付選「其他」時要填名稱"); return; }
+    detail[type].push({ key, name: key === "其他" ? name : "", amount });
+  });
+  for (const t of ["mobile", "other"]) if (detail[t].length) f[t] = detail[t].reduce((a, x) => a + x.amount, 0);
+  const dtxt = (t) => detail[t].map((x) => `${x.key === "其他" ? x.name : x.key} ${num(x.amount)}`).join("、");
+  const payDetailText = [detail.mobile.length ? `行動支付：${dtxt("mobile")}` : "", detail.other.length ? `其他支付：${dtxt("other")}` : ""].filter(Boolean).join("；");
   for (const k of ["mem", "non"]) { f[k] = int(b[k], 100000); if (Number.isNaN(f[k])) errs.push("來客數不對"); }
   f.pieces = int(b.pieces, 100000); if (Number.isNaN(f.pieces)) errs.push("件數不對");
   const items = [];
@@ -173,7 +195,7 @@ function validate(b, today) {
   const total = PAY.reduce((a, [k]) => a + f[k], 0);
   const cust = f.mem + f.non;
   return {
-    data: { store, date, who, ...f, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items, petty, pettySum: petty.reduce((a, p) => a + p.amount, 0),
+    data: { store, date, who, ...f, payDetailText, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items, petty, pettySum: petty.reduce((a, p) => a + p.amount, 0),
       returns, returnSum: returns.reduce((a, p) => a + p.amount, 0),
       // 應投庫 = 今日現金業績（不扣零用金，沿用舊工具修正後的算法）
       actualDeposit, depositDiff: actualDeposit === null ? null : actualDeposit - f.cash, ...scene, weather: "" },
@@ -190,7 +212,7 @@ function pettyText(petty) {
 }
 function buildRow(d, photoUrl, stamp, account) {
   return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl, stamp, account, d.pettySum || 0, pettyText(d.petty),
-    d.pieces || 0, d.voucherE || 0, d.voucherG || 0, d.mobile || 0, d.other || 0, "",
+    d.pieces || 0, d.voucherE || 0, d.voucherG || 0, d.mobile || 0, d.other || 0, d.payDetailText || "",
     d.returnSum || 0, (d.returns || []).map((r) => `${r.no}　${num(r.amount)}`).join("\n"),
     d.actualDeposit === null || d.actualDeposit === undefined ? "" : d.actualDeposit,
     d.depositDiff === null || d.depositDiff === undefined ? "" : d.depositDiff,
@@ -221,6 +243,7 @@ function buildCard(d, photoUrl, tag) {
     { type: "FactSet", spacing: "Medium", facts: [
       { title: "總業績", value: money(d.total) },
       { title: "付款", value: payText(d) },
+      ...(d.payDetailText ? [{ title: "付款明細", value: d.payDetailText.replace(/；/g, "\n\n") }] : []),
       { title: "來客數", value: `${num(d.cust)}（會員 ${num(d.mem)} / 非會員 ${num(d.non)}）` },
       { title: "平均客單", value: d.cust > 0 ? money(d.avg) : "—" },
       ...(d.pieces > 0 ? [{ title: "件數", value: num(d.pieces) }] : []),
@@ -419,7 +442,7 @@ async function handle(req, res, deps) {
   const sheets = sheetsApi(GoogleAuth);
   try {
     if (req.method === "GET" && req.query.op === "config") {
-      return res.json({ ok: true, items: await readItems(sheets), account: user.account, name: user.name, hq: isHq(user.account), dept: DEPT });
+      return res.json({ ok: true, items: await readItems(sheets), account: user.account, name: user.name, hq: isHq(user.account), dept: DEPT, payOpts: PAY_OPTS });
     }
     const ops = require("./ops");
     // 本月進度：門市帳號看得到每一間（聊天室分頁本來就綁門市）；七間總覽只給總部
@@ -487,5 +510,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, PAY_OPTS, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };
