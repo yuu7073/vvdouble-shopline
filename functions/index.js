@@ -828,7 +828,7 @@ exports.reportOpening = onSchedule(
 
 // 月目標同步：每小時把舊工具的月目標寫到試算表「目標」分頁 G:I（月總覽用）
 exports.reportTargetsSync = onSchedule(
-  { schedule: "*/5 * * * *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 120, memory: "256MiB" },
+  { schedule: "17 * * * *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 120, memory: "256MiB" },
   async () => {
     const ctx = { sheets: report.sheetsApi(GoogleAuth), GoogleAuth };
     try { console.log("report targets:", await require("./ops").syncMonthTargets(ctx, report.twNow().date.slice(0, 7))); }
