@@ -219,7 +219,7 @@ function paySpread(d) {
   const sum = (list, key) => { const v = list.filter((x) => x.key === key).reduce((a, x) => a + x.amount, 0); return v || ""; };
   const custom = (det.other || []).filter((x) => x.key === "其他");
   return [d.mobile || 0, ...PAY_OPTS.mobile.map((k) => sum(det.mobile || [], k)), d.other || 0, ...OTHER_FIXED.map((k) => sum(det.other || [], k)),
-    custom.reduce((a, x) => a + x.amount, 0) || "", custom.map((x) => x.name).join("、")];
+    custom.reduce((a, x) => a + x.amount, 0) || "", custom.map((x) => `${x.name} ${num(x.amount)}`).join("、")];
 }
 function buildRow(d, photoUrl, stamp, account) {
   return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, itemsText(d.items), photoUrl,
