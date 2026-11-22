@@ -58,13 +58,16 @@ async function forecast(store, date, fetchFn = fetch) {
 
 // ---------- 歷史資料：舊日誌 ＋ 試算表（同一天以試算表為準） ----------
 const rev = (group) => Object.fromEntries(Object.entries(R.OPTS[group]).map(([k, v]) => [v, k]));
+// 欄位位置一律用欄名查，之後試算表加欄、搬欄都不用改這裡
+const col = (name) => R.HEADERS.indexOf(name);
 function sheetDay(r) {
-  const w = String(r[38] || "");
+  const g = (name) => String(r[col(name)] || "");
+  const w = g("天氣");
   return {
-    sales: n0(r[3]), customers: n0(r[7]), items: n0(r[12]),
+    sales: n0(r[col("總業績")]), customers: n0(r[col("來客數")]), items: n0(r[col("件數")]),
     weather: /雷/.test(w) ? "storm" : /雨/.test(w) ? "rainy" : w ? "other" : "",
-    crowd: rev("crowd")[String(r[39] || "")] || "", stock: rev("stock")[String(r[42] || "")] || "", tryc: rev("tryc")[String(r[43] || "")] || "",
-    hot: String(r[41] || "").split("、").map((x) => rev("hot")[x]).filter(Boolean),
+    crowd: rev("crowd")[g("人潮")] || "", stock: rev("stock")[g("商品狀態")] || "", tryc: rev("tryc")[g("試穿轉換")] || "",
+    hot: g("熱銷類別").split("、").map((x) => rev("hot")[x]).filter(Boolean),
   };
 }
 function oldDay(l) {

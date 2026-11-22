@@ -24,15 +24,15 @@ const STORES = {
 
 // 百貨店的行動支付／其他支付種類（沿用舊工具的清單再加三個）；「其他」可自己填名稱
 const PAY_OPTS = {
-  mobile: ["LINE PAY", "ICP", "悠遊付", "PAYEASY", "愛金卡", "Pi 錢包", "街口支付", "台灣 Pay"],
-  other: ["7-11 禮券", "商品禮券", "限定優惠券", "即享抵用券", "一點一元", "一點兩元", "點數活動", "其他"],
+  mobile: ["LINE PAY", "ICP", "悠遊付", "PAYEASY", "愛金卡", "Pi 錢包", "街口支付", "台灣 Pay", "SKM PAY", "LINE PAY MONEY", "台新 PAY"],
+  other: ["7-11 禮券", "商品禮券", "限定優惠券", "即享抵用券", "一點一元", "一點兩元", "點數活動", "會員點數", "會員折抵", "APP 抵用", "銀角零卡", "其他"],
 };
 const OTHER_FIXED = PAY_OPTS.other.filter((x) => x !== "其他");
 // 行動支付、其他支付的每個種類各佔一欄，方便核對
 const HEADERS = ["日期", "門市", "回報人", "總業績", "現金", "刷卡", "LINE Pay", "來客數", "會員", "非會員", "平均客單", "照片", "件數", "電子抵用券", "商品抵用券",
   "行動支付", ...PAY_OPTS.mobile.map((x) => `行動｜${x}`), "其他支付", ...OTHER_FIXED.map((x) => `其他｜${x}`), "其他｜自填金額", "其他｜自填名稱",
   "銷退金額", "銷退明細", "實際投庫", "投庫差額", "天氣", "人潮", "客群", "熱銷類別", "商品狀態", "試穿轉換", "現場補充", "特別狀況", "送出時間", "Teams 帳號"];
-const LAST_COL = "AV";
+const LAST_COL = "BC";
 // 現場狀況的選項（代號沿用舊的門市營運中心，試算表裡存中文）
 const OPTS = {
   crowd: { cold: "冷清", normal: "普通", warm: "熱絡", full: "爆滿" },
@@ -219,7 +219,8 @@ function paySpread(d) {
   const sum = (list, key) => { const v = list.filter((x) => x.key === key).reduce((a, x) => a + x.amount, 0); return v || ""; };
   const custom = (det.other || []).filter((x) => x.key === "其他");
   return [d.mobile || 0, ...PAY_OPTS.mobile.map((k) => sum(det.mobile || [], k)), d.other || 0, ...OTHER_FIXED.map((k) => sum(det.other || [], k)),
-    custom.reduce((a, x) => a + x.amount, 0) || "", custom.map((x) => `${x.name} ${num(x.amount)}`).join("、")];
+    custom.reduce((a, x) => a + x.amount, 0) || "", // 只有一筆就只寫名稱（金額在前一欄）；多筆才在名稱後面帶各自的金額
+    custom.length === 1 ? custom[0].name : custom.map((x) => `${x.name} ${num(x.amount)}`).join("、")];
 }
 function buildRow(d, photoUrl, stamp, account) {
   return [d.date, STORES[d.store], d.who, d.total, d.cash, d.card, d.linepay, d.cust, d.mem, d.non, d.avg, photoUrl,

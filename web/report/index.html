@@ -215,7 +215,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
   var photoData = '';
   var busy = false;
   var PAYKEYS = ['cash', 'card', 'linepay', 'voucherE', 'voucherG'];
-  var PAY_OPTS = { mobile: ['LINE PAY', 'ICP', '悠遊付', 'PAYEASY', '愛金卡', 'Pi 錢包', '街口支付', '台灣 Pay'], other: ['7-11 禮券', '商品禮券', '限定優惠券', '即享抵用券', '一點一元', '一點兩元', '點數活動', '其他'] };
+  var PAY_OPTS = { mobile: ['LINE PAY', 'ICP', '悠遊付', 'PAYEASY', '愛金卡', 'Pi 錢包', '街口支付', '台灣 Pay', 'SKM PAY', 'LINE PAY MONEY', '台新 PAY'], other: ['7-11 禮券', '商品禮券', '限定優惠券', '即享抵用券', '一點一元', '一點兩元', '點數活動', '會員點數', '會員折抵', 'APP 抵用', '銀角零卡', '其他'] };
   var DEPT_DEFAULT = ['tongyi', 'taoyuan', 'xintiandi'];
   // 依門市類型顯示付款欄位（先用內建名單畫，載入設定後以後端名單為準）
   function applyStoreType(list) {
@@ -225,7 +225,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     paySum();
     Array.prototype.forEach.call(document.querySelectorAll('[data-street]'), function (el) { el.style.display = dept ? 'none' : 'flex'; if (dept) el.querySelector('input').value = ''; });
   }
-  var VER = 'v1.9';
+  var VER = 'v1.10';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
