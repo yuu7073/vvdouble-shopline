@@ -826,16 +826,13 @@ exports.reportOpening = onSchedule(
   }
 );
 
-// 一次性：把舊工具 11 月日誌搬進試算表，並產生 11/22 忠孝開店提醒預覽（跑完這段會移除）
-exports.reportImportOnce = onSchedule(
-  { schedule: "*/10 4-6 22 11 *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 300, memory: "512MiB" },
+// 月目標同步：每小時把舊工具的月目標寫到試算表「目標」分頁 G:I（月總覽用）
+exports.reportTargetsSync = onSchedule(
+  { schedule: "*/5 * * * *", region: "asia-east1", timeZone: "Asia/Taipei", timeoutSeconds: 120, memory: "256MiB" },
   async () => {
-    const ops = require("./ops");
     const ctx = { sheets: report.sheetsApi(GoogleAuth), GoogleAuth };
-    try { console.log("report import:", JSON.stringify(await ops.importOld(ctx, "2026-11"))); }
-    catch (e) { console.error("report import", e); await ctx.sheets.put("開店提醒預覽!C1:C2", [["匯入失敗"], [String(e.message || e).slice(0, 300)]]); }
-    try { await ops.previewOpening({ sheets: ctx.sheets, GoogleAuth }, "zhongxiao", "2026-11-22"); }
-    catch (e) { console.error("report preview", e); await ctx.sheets.put("開店提醒預覽!D1:D2", [["預覽失敗"], [String(e.message || e).slice(0, 300)]]); }
+    try { console.log("report targets:", await require("./ops").syncMonthTargets(ctx, report.twNow().date.slice(0, 7))); }
+    catch (e) { console.error("report targets", e); await ctx.sheets.put("目標!K1:K2", [["月目標同步失敗"], [`${report.twNow().stamp} ${String(e.message || e).slice(0, 200)}`]]); }
   }
 );
 
