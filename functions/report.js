@@ -195,7 +195,7 @@ function validate(b, today) {
   const total = PAY.reduce((a, [k]) => a + f[k], 0);
   const cust = f.mem + f.non;
   return {
-    data: { store, date, who, ...f, payDetailText, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items, petty, pettySum: petty.reduce((a, p) => a + p.amount, 0),
+    data: { store, date, who, ...f, payDetailText, payDetail: detail, total, cust, avg: cust > 0 ? Math.round(total / cust) : 0, items, petty, pettySum: petty.reduce((a, p) => a + p.amount, 0),
       returns, returnSum: returns.reduce((a, p) => a + p.amount, 0),
       // 應投庫 = 今日現金業績（不扣零用金，沿用舊工具修正後的算法）
       actualDeposit, depositDiff: actualDeposit === null ? null : actualDeposit - f.cash, ...scene, weather: "" },
@@ -300,6 +300,30 @@ function sheetsApi(GoogleAuth) {
   };
 }
 // 同一間店同一天再送一次＝更新那一列，不會多出一列
+// 零用金另外攤平成一筆一列的分頁，助理對帳用。類別由用途的關鍵字自動判斷（可在試算表手動改）
+const PETTY_CATS = [["文宣印刷", /列印|影印|印刷|海報|文宣|護貝/], ["飲水", /飲用水|飲料|桶裝水|水費/], ["清潔", /清潔|垃圾|打掃|衛生紙|洗手/],
+  ["關稅運費", /關稅|稅金|運費|順豐|郵資|快遞|宅配/], ["拜拜", /拜拜|供品|金紙/], ["文具耗材", /文具|電池|膠帶|紙袋|耗材|燈泡/], ["交通停車", /停車|車資|計程車|油資/]];
+function pettyCat(note) {
+  let best = "其他", at = Infinity;
+  for (const [cat, re] of PETTY_CATS) { const m = re.exec(String(note || "")); if (m && m.index < at) { at = m.index; best = cat; } }
+  return best;
+}
+const pettyRows = (d, stamp) => (d.petty || []).map((p) => [d.date, d.date.slice(0, 7), STORES[d.store], p.amount, pettyCat(p.note), p.note, p.handler, d.who, stamp]);
+// 付款明細（百貨店的行動支付／其他支付）也攤平成一筆一列
+const payRows = (d, stamp) => ["mobile", "other"].flatMap((t) => ((d.payDetail || {})[t] || []).map((x) => [d.date, d.date.slice(0, 7), STORES[d.store], t === "mobile" ? "行動支付" : "其他支付", x.key === "其他" ? x.name : x.key, x.amount, d.who, stamp]));
+// 同一天同一間重送時，先蓋掉原本那幾列；多的往下加，少的清空（不整頁重寫，避免七間同時送出互相蓋掉）
+async function syncTab(sheets, tab, lastCol, d, rows) {
+  const all = await sheets.get(`${tab}!A2:C`);
+  const old = [];
+  all.forEach((r, i) => { if (cellDate(r[0]) === d.date && String(r[2] || "").trim() === STORES[d.store]) old.push(i + 2); });
+  if (!rows.length && !old.length) return 0;
+  const blank = Array(lastCol.charCodeAt(0) - 64).fill("");
+  for (let i = 0; i < old.length; i++) await sheets.update(`${tab}!A${old[i]}:${lastCol}${old[i]}`, rows[i] || blank);
+  if (rows.length > old.length) await sheets.appendRows(`${tab}!A:${lastCol}`, rows.slice(old.length));
+  return rows.length;
+}
+const syncPetty = (sheets, d, stamp) => syncTab(sheets, "零用金", "I", d, pettyRows(d, stamp));
+const syncPay = (sheets, d, stamp) => syncTab(sheets, "付款明細", "H", d, payRows(d, stamp));
 async function upsertRow(sheets, row) {
   const keys = await sheets.get("回報!A2:B");
   const idx = keys.findIndex((r) => cellDate(r[0]) === row[0] && String(r[1] || "").trim() === row[1]);
@@ -488,7 +512,10 @@ async function handle(req, res, deps) {
       try { const w = await ops.forecast(v.data.store, v.data.date); if (w) v.data.weather = `${w.text} ${w.tmin}–${w.tmax}°C`; } catch (e) { console.error("report weather", e); }
     }
     const photoUrl = await savePhoto(admin, v.photoB64);
-    const result = await upsertRow(sheets, buildRow(v.data, photoUrl, twNow().stamp, user.account));
+    const stamp = twNow().stamp;
+    const result = await upsertRow(sheets, buildRow(v.data, photoUrl, stamp, user.account));
+    try { await syncPetty(sheets, v.data, stamp); } catch (e) { console.error("report petty", e); }
+    try { await syncPay(sheets, v.data, stamp); } catch (e) { console.error("report paydetail", e); }
 
     // 貼到該店聊天室：失敗不影響回報本身（資料已經在試算表）
     let posted = false;
@@ -510,5 +537,5 @@ async function handle(req, res, deps) {
 module.exports = {
   STORES, HEADERS, TENANT_ID, CLIENT_ID, APP_URI,
   twNow, shortDate, verifyToken, validate, buildRow, buildCard, itemsText, pettyText,
-  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, PAY_OPTS, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
+  upsertRow, readItems, readWebhook, storeDbGet, isHq, cellDate, payText, DEPT, PAY_OPTS, pettyCat, pettyRows, syncPetty, payRows, syncPay, OPTS, LAST_COL, sceneText, money, num, digestText, sheetsApi, pushDigest, handleLineEvent, handle,
 };
