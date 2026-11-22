@@ -99,7 +99,10 @@ async function loadStore(ctx, store, today) {
   const targets = {};
   [t0, t1].forEach((t) => Object.entries(t || {}).forEach(([d, v]) => { if (n0(v) > 0) targets[d] = n0(v); }));
   const daily = Object.entries(targets).filter(([d]) => d.startsWith(ym)).reduce((a, [, v]) => a + v, 0);
-  return { days, targets, monthTarget: n0(mt && typeof mt === "object" ? mt.target || mt.amount : mt) || daily };
+  // 月目標以試算表「目標」分頁 G:I 為準（總部可以直接在那裡改），沒有才用舊工具的
+  if (!ctx.monthTargets) ctx.monthTargets = await quiet(ctx.sheets.get("目標!G2:I"), "month target sheet") || [];
+  const hit = ctx.monthTargets.find((r) => String(r[0] || "").trim() === R.STORES[store] && String(r[1] || "").trim() === ym);
+  return { days, targets, monthTarget: n0(hit && hit[2]) || n0(mt && typeof mt === "object" ? mt.target || mt.amount : mt) || daily };
 }
 
 // ---------- 本月進度 ----------
@@ -275,7 +278,7 @@ function progressBars(pg, date) {
   const head = heading("本月進度 📊");
   const line = (text, subtle) => ({ type: "TextBlock", wrap: true, spacing: "Small", size: subtle ? "Small" : "Default", isSubtle: !!subtle, text });
   const img = (fill, mark, ok, alt) => ({ type: "Image", url: `${BAR_URL}&f=${fill}${mark === null ? "" : `&m=${mark}`}&ok=${ok ? 1 : 0}`, altText: alt, size: "Stretch", spacing: "Small" });
-  const sales = `業績 **${pg.rate}%**　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`;
+  const sales = `${pg.label ? pg.label + "　" : ""}業績 **${pg.rate}%**　${R.money(pg.cum)} / ${R.money(pg.monthTarget)}`;
   // 有每日目標：直線標出「照每日目標到昨天應該到哪裡」；沒有才用過了幾天來比
   let due, label;
   if (pg.paceTarget) { due = Math.round((pg.paceTarget / pg.monthTarget) * 1000) / 10; label = `直線是應有進度 ${due}%（照每日目標應累計 ${R.money(pg.paceTarget)}）`; }
@@ -303,6 +306,8 @@ const dayNo = (date) => { const [y, m, d] = date.split("-").map(Number); return 
 const heading = (text, first) => ({ type: "Container", style: "warning", backgroundImage: { url: `${BAR_URL}&solid=1`, fillMode: "Repeat" }, spacing: first ? "None" : "Medium",
   items: [{ type: "TextBlock", text, weight: "Bolder", color: "Dark", wrap: true, size: first ? "Medium" : "Default" }] });
 
+const TAICHUNG = ["yizhong", "xinyizhong"];
+
 // ---------- 開店提醒卡片 ----------
 function openingCard(o) {
   const { store, date, open, w, pg, last, tips, tag } = o;
@@ -325,7 +330,13 @@ function openingCard(o) {
 }
 async function buildOpening(ctx, store, date, tag, open) {
   const [data, w] = await Promise.all([loadStore(ctx, store, date), quiet(forecast(store, date), "forecast")]);
-  const pg = progress(data, date);
+  let pg = progress(data, date);
+  // 一中、新一中的月目標合併計算：卡片上的本月進度顯示兩間合計
+  if (TAICHUNG.includes(store)) {
+    const other = progress(await loadStore(ctx, TAICHUNG.find((x) => x !== store), date), date);
+    const cum = pg.cum + other.cum, monthTarget = pg.monthTarget && other.monthTarget ? pg.monthTarget + other.monthTarget : 0;
+    pg = { ...pg, cum, monthTarget, rate: monthTarget ? Math.round((cum / monthTarget) * 1000) / 10 : null, paceTarget: 0, todayTarget: 0, label: "台中合計" };
+  }
   const lastDay = data.days[addDays(date, -7)];
   const st = stats7(data, date);
   // 順序：整理提醒 → 今天天氣／週末 → 服務技巧 → 近 7 天數據（最多 5 則）
@@ -352,7 +363,7 @@ async function syncMonthTargets(ctx, ym) {
   const cur = (await ctx.sheets.get("目標!G2:I")).filter((r) => r[0]);
   const key = (r) => `${String(r[0]).trim()}|${String(r[1]).trim()}`;
   const map = new Map(cur.map((r) => [key(r), [String(r[0]).trim(), String(r[1]).trim(), n0(r[2])]]));
-  Object.keys(R.STORES).forEach((s) => { const v = n0(mt[s] && typeof mt[s] === "object" ? mt[s].target || mt[s].amount : mt[s]); if (v > 0) map.set(`${R.STORES[s]}|${ym}`, [R.STORES[s], ym, v]); });
+  Object.keys(R.STORES).forEach((s) => { const v = n0(mt[s] && typeof mt[s] === "object" ? mt[s].target || mt[s].amount : mt[s]); if (v > 0 && !map.has(`${R.STORES[s]}|${ym}`)) map.set(`${R.STORES[s]}|${ym}`, [R.STORES[s], ym, v]); });
   const rows = [["門市", "月份", "月目標"], ...map.values()];
   await ctx.sheets.put(`目標!G1:I${rows.length}`, rows);
   return rows.length - 1;
