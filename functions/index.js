@@ -320,6 +320,96 @@ async function autoSeo(token, db, productId, by) {
   } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
 }
 
+// ===== 批次改價（會員價／VIP／VVIP）=====
+// 開始時間到：寫入會員價、VIP、VVIP（後台有特價的先清成 0）；結束時間到：三個價格歸 0、特價補回
+const PRICE_FIELDS = "fields[]=items.id&fields[]=items.title_translations&fields[]=items.status&fields[]=items.sku&fields[]=items.price&fields[]=items.price_sale&fields[]=items.member_price&fields[]=items.product_price_tiers&fields[]=items.same_price&fields[]=items.variations";
+const money = (m) => (m && typeof m === "object") ? (m.dollars != null ? Number(m.dollars) : (m.cents != null ? m.cents / 100 : 0)) : (m == null ? 0 : Number(m));
+function tierObj(arr) {
+  // product_price_tiers 回傳是陣列 [{membership_tier_id, member_price}]，整理成 {tierId: 金額}
+  const out = {};
+  (arr || []).forEach((t) => { const id = t.membership_tier_id || t.tier_id || t.id; if (id) out[id] = money(t.member_price != null ? t.member_price : t.price); });
+  return out;
+}
+function slimPriceProduct(it) {
+  return {
+    id: it.id,
+    title: (it.title_translations || {})["zh-hant"] || "",
+    status: it.status,
+    sku: it.sku || ((it.variations || [])[0] || {}).sku || "",
+    price: money(it.price), price_sale: money(it.price_sale), member_price: money(it.member_price), tiers: tierObj(it.product_price_tiers),
+    same_price: it.same_price,
+    variations: (it.variations || []).map((v) => ({ id: v.id, sku: v.sku, price: money(v.price), price_sale: money(v.price_sale), member_price: money(v.member_price), tiers: tierObj(v.product_price_tiers) })),
+  };
+}
+async function setPrices(token, product, body) {
+  // body: {member_price, product_price_tiers:{tierId:金額}, price_sale?}
+  // 多規格價格不同的商品 Shopline 不接受主商品 update_price，要逐規格更新
+  if (product.same_price === false && (product.variations || []).length) {
+    const errs = [];
+    for (const v of product.variations) {
+      const b = Object.assign({}, body);
+      if (body.price_sale_by_variation) { b.price_sale = body.price_sale_by_variation[v.id]; delete b.price_sale_by_variation; }
+      if (b.price_sale === undefined) delete b.price_sale;
+      const r = await slFetch(token, `/products/${product.id}/variations/${v.id}/update_price`, { method: "PUT", json: b });
+      if (!(r.status === 200 || r.status === 201)) errs.push((v.sku || v.id) + ":" + JSON.stringify(r.body).slice(0, 80));
+    }
+    return { ok: !errs.length, error: errs.join("；") };
+  }
+  const b = Object.assign({}, body); delete b.price_sale_by_variation; if (b.price_sale === undefined) delete b.price_sale;
+  const r = await slFetch(token, `/products/${product.id}/update_price`, { method: "PUT", json: b });
+  return { ok: r.status === 200 || r.status === 201, error: (r.status === 200 || r.status === 201) ? "" : JSON.stringify(r.body).slice(0, 120) };
+}
+async function runPriceJob(token, db, jobId, job, step) {
+  // step: "apply"（寫入活動價）或 "zero"（歸 0、補回特價）
+  const ref = db.ref(`/priceJobs/${jobId}`);
+  await ref.update({ status: step === "apply" ? "applying" : "zeroing" });
+  const results = job.results || {}; let failed = 0;
+  const vipId = job.tiers && job.tiers.vip, vvipId = job.tiers && job.tiers.vvip;
+  for (const p of job.products || []) {
+    let body;
+    if (step === "apply") {
+      const tiers = {}; if (vipId) tiers[vipId] = Number(p.target.vip) || 0; if (vvipId) tiers[vvipId] = Number(p.target.vvip) || 0;
+      body = { member_price: Number(p.target.member) || 0, product_price_tiers: tiers };
+      if (p.same_price === false) { const m = {}; (p.variations || []).forEach((v) => { if (v.price_sale > 0) m[v.id] = 0; }); if (Object.keys(m).length) body.price_sale_by_variation = m; }
+      else if (p.before && p.before.price_sale > 0) body.price_sale = 0;
+    } else {
+      const tiers = {}; if (vipId) tiers[vipId] = 0; if (vvipId) tiers[vvipId] = 0;
+      body = { member_price: 0, product_price_tiers: tiers };
+      if (p.same_price === false) { const m = {}; (p.variations || []).forEach((v) => { if (v.price_sale > 0) m[v.id] = v.price_sale; }); if (Object.keys(m).length) body.price_sale_by_variation = m; }
+      else if (p.before && p.before.price_sale > 0) body.price_sale = p.before.price_sale;
+    }
+    try {
+      const r = await setPrices(token, p, body);
+      results[p.id] = ((results[p.id] || "") + " " + (step === "apply" ? (r.ok ? "✔套用" : "✖套用 " + r.error) : (r.ok ? "✔歸零" : "✖歸零 " + r.error))).trim();
+      if (!r.ok) failed++;
+    } catch (e) { results[p.id] = ((results[p.id] || "") + " ✖" + e.message).trim(); failed++; }
+  }
+  const upd = { results, failed: (job.failed || 0) + failed };
+  if (step === "apply") { upd.status = "active"; upd.appliedAt = Date.now(); } else { upd.status = "done"; upd.finishedAt = Date.now(); }
+  await ref.update(upd);
+  return { failed };
+}
+async function runDuePriceJobs(token, db) {
+  const snap = await db.ref("/priceJobs").get();
+  const out = [];
+  if (!snap.exists()) return out;
+  const jobs = snap.val(); const now = Date.now();
+  for (const id of Object.keys(jobs)) {
+    const j = jobs[id];
+    if (j.status === "pending" && (j.startAt || 0) <= now) { const r = await runPriceJob(token, db, id, j, "apply"); out.push({ id, step: "apply", failed: r.failed }); j.status = "active"; }
+    if ((j.status === "active") && (j.endAt || 0) <= now) { const fresh = (await db.ref(`/priceJobs/${id}`).get()).val(); const r = await runPriceJob(token, db, id, fresh, "zero"); out.push({ id, step: "zero", failed: r.failed }); }
+  }
+  return out;
+}
+
+exports.priceJobsEvery5 = onSchedule(
+  { schedule: "every 5 minutes", region: "asia-east1", timeZone: "Asia/Taipei", secrets: [SHOPLINE_TOKEN], timeoutSeconds: 540, memory: "512MiB" },
+  async () => {
+    const ran = await runDuePriceJobs(SHOPLINE_TOKEN.value(), admin.database());
+    if (ran.length) console.log("price jobs ran:", JSON.stringify(ran));
+  }
+);
+
 exports.shopline = onRequest(
   {
     region: "asia-east1",
@@ -632,6 +722,73 @@ exports.shopline = onRequest(
           if (snap.exists()) { const v = snap.val(); Object.keys(v).forEach((k) => out.push({ id: k, title: v[k].title, endAt: v[k].endAt, status: v[k].status, count: (v[k].products || []).length, failed: v[k].failed || 0, by: v[k].by, finishedAt: v[k].finishedAt || null, results: v[k].results || null, revert: v[k].revert || {}, titles: Object.fromEntries((v[k].products || []).map((p) => [p.id, p.title])), manualOff: (v[k].revert && v[k].revert.excluded) ? (v[k].products || []).filter((p) => p.before && p.before.is_excluded_promotion === false).map((p) => p.id) : [] })); }
           out.sort((a, b) => b.endAt - a.endAt);
           return res.json({ items: out.slice(0, 30) });
+        }
+
+        case "membershipTiers": {
+          const r = await slFetch(token, `/membership_tiers`);
+          const items = (r.body.items || r.body || []).map((t) => ({ id: t.id || t._id, name: (t.name_translations || {})["zh-hant"] || t.name || "", level: t.level }));
+          return res.json({ items });
+        }
+
+        case "priceLookup": {
+          // 批次改價：用組頭搜尋，回傳價格相關欄位（含會員價、VIP/VVIP、規格）
+          const q = encodeURIComponent(req.body.query || "");
+          const r = await slFetch(token, `/products/search?query=${q}&per_page=50&${PRICE_FIELDS}`);
+          return res.json({ status: r.status, items: (r.body.items || []).map(slimPriceProduct) });
+        }
+
+        case "schedulePriceJob": {
+          const { title, startAt, endAt, products, tiers, by } = req.body;
+          if (!startAt || !endAt || !products || !products.length || !tiers) return res.status(400).json({ error: "參數不足" });
+          if (endAt <= startAt) return res.status(400).json({ error: "結束時間要晚於開始時間" });
+          const r = await db.ref("/priceJobs").push({ title: title || "", startAt, endAt, products, tiers, by: by || "", status: "pending", createdAt: Date.now() });
+          return res.json({ ok: true, jobId: r.key });
+        }
+
+        case "priceJobs": {
+          const snap = await db.ref("/priceJobs").get();
+          const out = [];
+          if (snap.exists()) { const v = snap.val(); Object.keys(v).forEach((k) => out.push({ id: k, title: v[k].title, startAt: v[k].startAt, endAt: v[k].endAt, status: v[k].status, count: (v[k].products || []).length, failed: v[k].failed || 0, by: v[k].by, results: v[k].results || null, titles: Object.fromEntries((v[k].products || []).map((p) => [p.id, p.title])) })); }
+          out.sort((a, b) => b.startAt - a.startAt);
+          return res.json({ items: out.slice(0, 30) });
+        }
+
+        case "runPriceJobNow": {
+          const snap = await db.ref(`/priceJobs/${req.body.jobId}`).get();
+          if (!snap.exists()) return res.status(404).json({ error: "找不到任務" });
+          const job = snap.val(); const step = req.body.step === "zero" ? "zero" : "apply";
+          if (step === "apply" && job.status !== "pending") return res.status(400).json({ error: "這個任務已經套用過了" });
+          if (step === "zero" && job.status !== "active" && job.status !== "pending") return res.status(400).json({ error: "這個任務不在套用中" });
+          const r = await runPriceJob(token, db, req.body.jobId, job, step);
+          return res.json({ ok: true, failed: r.failed });
+        }
+
+        case "cancelPriceJob": {
+          const snap = await db.ref(`/priceJobs/${req.body.jobId}`).get();
+          if (!snap.exists()) return res.status(404).json({ error: "找不到任務" });
+          if (snap.val().status !== "pending") return res.status(400).json({ error: "只有等待中的任務能取消；套用中的請按「立即歸零」" });
+          await db.ref(`/priceJobs/${req.body.jobId}`).update({ status: "cancelled" });
+          return res.json({ ok: true });
+        }
+
+        case "deletePriceJob": {
+          const snap = await db.ref(`/priceJobs/${req.body.jobId}`).get();
+          if (!snap.exists()) return res.status(404).json({ error: "找不到任務" });
+          const st = snap.val().status;
+          if (["pending", "active", "applying", "zeroing"].includes(st)) return res.status(400).json({ error: "進行中的任務不能刪除" });
+          await db.ref(`/priceJobs/${req.body.jobId}`).remove();
+          return res.json({ ok: true });
+        }
+
+        case "zeroPricesNow": {
+          // 一鍵歸零：表單這批商品的會員價／VIP／VVIP 設 0；有帶 before.price_sale 的補回特價
+          const { products, tiers, by } = req.body;
+          if (!products || !products.length || !tiers) return res.status(400).json({ error: "參數不足" });
+          const job = { products, tiers, by: by || "", title: "一鍵歸零", startAt: Date.now(), endAt: Date.now(), status: "active", createdAt: Date.now() };
+          const r = await db.ref("/priceJobs").push(job);
+          const out = await runPriceJob(token, db, r.key, job, "zero");
+          const fin = (await db.ref(`/priceJobs/${r.key}`).get()).val();
+          return res.json({ ok: true, failed: out.failed, results: fin.results || {} });
         }
 
         case "deleteCleanupJob": {

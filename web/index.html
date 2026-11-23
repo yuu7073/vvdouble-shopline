@@ -100,6 +100,7 @@
   <div class="tab t-orange active" data-tab="img">新品放圖</div>
   <div class="tab t-orange" data-tab="desc">文案／尺寸表</div>
   <div class="tab t-yellow" data-tab="camp">活動設定</div>
+  <div class="tab t-yellow" data-tab="pj">批次改價</div>
   <div class="tab t-green" data-tab="np">商品建檔</div>
 </div>
 <main>
@@ -267,6 +268,44 @@
   </div>
   <div class="card">
     <table id="tblMk"><thead><tr><th style="width:30px">#</th><th>商品資料夾</th><th>顏色子資料夾</th><th style="width:160px">結果</th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+<section id="panel-pj" class="hidden">
+  <div class="card">
+    <div class="opts" style="margin-top:0">
+      <span class="stp">1</span><label style="flex:1;min-width:260px">表單網址　<input id="sheetUrlP" type="text" style="width:calc(100% - 80px)" placeholder="貼上 Google 試算表網址"></label>
+      <button class="btn ghost" id="btnTabsP">載入分頁</button>
+      <label>分頁　<select id="sheetTabP" style="min-width:200px;padding:8px;border:1px solid var(--line);border-radius:8px"><option value="">（先載入分頁）</option></select></label>
+      <button class="btn" id="btnLoadPj" disabled>讀取並對照商品</button>
+      <span class="muted" id="pjMsg"></span>
+    </div>
+    <p class="muted mini" style="margin:4px 0 0">讀取欄位：組頭、會員價、VIP、VVIP ｜ 機器人 850773404357-compute@developer.gserviceaccount.com</p>
+  </div>
+  <div class="card">
+    <div style="margin-bottom:8px"><span class="stp">2</span><b class="mini">活動時間</b></div>
+    <div class="grid2">
+      <label>活動名稱<input id="pjTitle" type="text" placeholder="例如 黑五會員日"></label>
+      <label>開始（寫入會員價）<input id="pjStart" type="datetime-local"></label>
+      <label>結束（歸 0、補回特價）<input id="pjEnd" type="datetime-local"></label>
+    </div>
+    <div class="opts">
+      <button class="btn orange" id="btnPjSchedule" disabled>排定任務</button>
+      <button class="btn ghost" id="btnPjZero" disabled>一鍵歸零</button>
+    </div>
+  </div>
+  <div class="card">
+    <table id="tblPj">
+      <thead><tr><th style="width:30px">#</th><th>組頭</th><th>Shopline 商品</th><th>原價／特價</th><th>目前會員價／VIP／VVIP</th><th>會員價</th><th>VIP</th><th>VVIP</th><th style="width:200px">結果</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="opts" style="margin-top:0"><b>改價任務</b><button class="btn ghost" id="btnPjJobs">重新整理</button></div>
+    <div id="pjJobsBox" class="muted">—</div>
+  </div>
+  <div class="card">
+    <div class="prog"><i id="bar4"></i></div>
+    <div id="log4">尚未開始</div>
   </div>
 </section>
 <section id="panel-np" class="hidden">
@@ -712,8 +751,147 @@ Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(t){
     $('#panel-camp').classList.toggle('hidden', t.dataset.tab !== 'camp');
     $('#panel-mk').classList.toggle('hidden', t.dataset.tab !== 'mk');
     $('#panel-np').classList.toggle('hidden', t.dataset.tab !== 'np');
+    $('#panel-pj').classList.toggle('hidden', t.dataset.tab !== 'pj');
   });
 });
+
+// ===== 批次改價（會員價／VIP／VVIP）=====
+var log4El = $('#log4');
+function logP(m){ var t = new Date().toTimeString().slice(0,8); log4El.textContent += "\n[" + t + "] " + m; log4El.scrollTop = log4El.scrollHeight; }
+function sheetIdP(){ var m=/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/.exec($('#sheetUrlP').value); return m?m[1]:''; }
+try{ $('#sheetUrlP').value = localStorage.getItem('vv_sheetP') || ''; }catch(e){}
+var pjRows = []; // {code, member, vip, vvip, products:[], result}
+var pjTiers = null; // {vip:id, vvip:id}
+
+$('#btnTabsP').addEventListener('click', async function(){
+  var id = sheetIdP(); if(!id){ $('#pjMsg').textContent = '✖ 請貼上正確的 Google 試算表網址'; return; }
+  try{ localStorage.setItem('vv_sheetP', $('#sheetUrlP').value); }catch(e){}
+  $('#pjMsg').textContent = '載入分頁中…';
+  try{
+    var j = await api('sheetTabs', {spreadsheetId:id});
+    var sel = $('#sheetTabP'); sel.innerHTML = '';
+    j.tabs.forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+    $('#pjMsg').textContent = j.title + '：' + j.tabs.length + ' 個分頁'; $('#btnLoadPj').disabled = false;
+  }catch(e){ $('#pjMsg').textContent = '✖ ' + e.message; }
+});
+
+async function loadTiers(){
+  if(pjTiers) return pjTiers;
+  var j = await api('membershipTiers', {});
+  var vip = j.items.filter(function(t){ return /^VVIP$/i.test(t.name); })[0], v1 = j.items.filter(function(t){ return /^VIP$/i.test(t.name); })[0];
+  if(!v1 || !vip) throw new Error('後台會員等級找不到 VIP／VVIP：' + j.items.map(function(t){return t.name;}).join('、'));
+  pjTiers = { vip: v1.id, vvip: vip.id }; return pjTiers;
+}
+function fmtTiers(p){ if(!pjTiers) return '—'; var m = p.member_price || 0, a = (p.tiers||{})[pjTiers.vip] || 0, b = (p.tiers||{})[pjTiers.vvip] || 0; return (m||'—') + ' / ' + (a||'—') + ' / ' + (b||'—'); }
+function renderPj(){
+  var tb = $('#tblPj tbody'); tb.innerHTML = '';
+  pjRows.forEach(function(r, i){
+    var tr = document.createElement('tr');
+    if(!r.products.length) tr.classList.add('bad'); else if(r.result && r.result.indexOf('✔')===0) tr.classList.add('done'); else if(r.result && r.result.indexOf('✖')>=0) tr.classList.add('bad');
+    var prods = r.products.length ? r.products.map(function(p){ return '<div>' + esc(p.title) + (p.same_price===false ? ' <span class="muted">(多規格價)</span>' : '') + '</div>'; }).join('') : '<span class="tag red">找不到商品</span>';
+    var pr = r.products.map(function(p){ return '<div>' + p.price + (p.price_sale ? ' ／ <span class="tag red">特價 ' + p.price_sale + '</span>' : '') + '</div>'; }).join('');
+    var cur = r.products.map(function(p){ return '<div>' + fmtTiers(p) + '</div>'; }).join('');
+    tr.innerHTML = '<td>' + (i+1) + '</td><td><b>' + esc(r.code) + '</b></td><td>' + prods + '</td><td>' + pr + '</td><td>' + cur + '</td><td><b>' + (r.member!=null?r.member:'—') + '</b></td><td><b>' + (r.vip!=null?r.vip:'—') + '</b></td><td><b>' + (r.vvip!=null?r.vvip:'—') + '</b></td><td class="st">' + esc(r.result || '') + '</td>';
+    tb.appendChild(tr);
+  });
+  var ok = pjRows.some(function(r){ return r.products.length; });
+  $('#btnPjSchedule').disabled = !ok; $('#btnPjZero').disabled = !ok;
+}
+
+$('#btnLoadPj').addEventListener('click', async function(){
+  if(!$('#sheetTabP').value){ $('#pjMsg').textContent = '請先選分頁'; return; }
+  $('#pjMsg').textContent = '讀取表單中…'; log4El.textContent = '';
+  var rows;
+  try{ await loadTiers(); rows = (await api('sheetRows', {spreadsheetId:sheetIdP(), tab:$('#sheetTabP').value})).rows; }
+  catch(e){ $('#pjMsg').textContent = '✖ ' + e.message; return; }
+  if(rows.length < 2){ $('#pjMsg').textContent = '表單沒有內容'; return; }
+  var header = rows[0];
+  var iCode = colIndex(header, ['組頭','貨號','款號']), iM = colIndex(header, ['會員價','一般會員']), iV = colIndex(header, ['VIP','VIP價']), iVV = colIndex(header, ['VVIP','VVIP價']);
+  if(iCode<0 || iM<0 || iV<0 || iVV<0){ $('#pjMsg').textContent = '找不到欄位（需要：組頭、會員價、VIP、VVIP）'; return; }
+  var num = function(v){ var n = parseFloat(String(v||'').replace(/[^\d.]/g,'')); return isNaN(n) ? null : Math.round(n); };
+  pjRows = [];
+  rows.slice(1).forEach(function(r){
+    var code = (r[iCode]||'').trim(); if(!code) return;
+    if(pjRows.some(function(x){return x.code===code;})) return;
+    pjRows.push({ code: code, member: num(r[iM]), vip: num(r[iV]), vvip: num(r[iVV]), products: [], result: '' });
+  });
+  var missing = pjRows.filter(function(r){ return r.member==null || r.vip==null || r.vvip==null; });
+  if(missing.length){ missing.forEach(function(r){ r.result = '✖ 表單價格沒填齊'; }); }
+  var seen = {};
+  for(var i=0;i<pjRows.length;i++){
+    var row = pjRows[i];
+    try{
+      var j = await api('priceLookup', {query: row.code});
+      row.products = (j.items||[]).filter(function(p){ return p.sku.indexOf(row.code)===0 || (p.variations||[]).some(function(v){ return (v.sku||'').indexOf(row.code)===0; }); });
+      row.products = row.products.filter(function(p){ if(seen[p.id]){ logP('－ ' + row.code + '：' + p.title + ' 已在組頭 ' + seen[p.id] + ' 出現，只算一次'); return false; } seen[p.id] = row.code; return true; });
+      logP((row.products.length?'✔ ':'？ ') + row.code + ' → ' + row.products.length + ' 個商品');
+    }catch(e){ logP('✖ ' + row.code + '：' + e.message); }
+    $('#bar4').style.width = Math.round((i+1)/pjRows.length*100)+'%';
+    if(i%10===9) renderPj();
+  }
+  renderPj(); $('#pjMsg').textContent = '對照完成：' + pjRows.filter(function(r){return r.products.length;}).length + ' / ' + pjRows.length + ' 款'; logP('對照完成。');
+});
+
+function pjPayload(){
+  var out = [];
+  pjRows.forEach(function(r){ if(r.member==null || r.vip==null || r.vvip==null) return; r.products.forEach(function(p){
+    out.push({ id: p.id, title: p.title, same_price: p.same_price, variations: (p.variations||[]).map(function(v){ return { id: v.id, sku: v.sku, price_sale: v.price_sale || 0 }; }),
+      before: { price_sale: p.price_sale || 0, member_price: p.member_price || 0, tiers: p.tiers || {} }, target: { member: r.member, vip: r.vip, vvip: r.vvip } });
+  }); });
+  return out;
+}
+function applyPjResults(results){
+  pjRows.forEach(function(r){ r.products.forEach(function(p){ var m = results[p.id]; if(m) r.result = (m.indexOf('✖')>=0 ? '✖ ' : '✔ ') + m; }); });
+  renderPj();
+}
+
+$('#btnPjSchedule').addEventListener('click', async function(){
+  var start = $('#pjStart').value, end = $('#pjEnd').value, title = $('#pjTitle').value.trim(), who = $('#who').value.trim();
+  if(!start || !end){ alert('請填開始與結束時間'); return; }
+  if(new Date(end) <= new Date(start)){ alert('結束時間要晚於開始時間'); return; }
+  var products = pjPayload(); if(!products.length){ alert('沒有可改價的商品'); return; }
+  var withSale = products.filter(function(p){ return p.before.price_sale > 0 || (p.variations||[]).some(function(v){ return v.price_sale > 0; }); }).length;
+  var startPast = new Date(start).getTime() <= Date.now();
+  if(!confirm('排定「' + (title||'未命名') + '」：' + products.length + ' 個商品\n' + (startPast ? '開始時間已過，會在 5 分鐘內寫入' : '開始 ' + start.replace('T',' ') + ' 寫入會員價／VIP／VVIP') + '\n結束 ' + end.replace('T',' ') + ' 歸 0' + (withSale ? '\n其中 ' + withSale + ' 個有特價：活動期間特價清 0，結束補回' : '') + '\n確定？')) return;
+  this.disabled = true;
+  try{ await api('schedulePriceJob', { title: title, startAt: new Date(start).getTime(), endAt: new Date(end).getTime(), products: products, tiers: pjTiers, by: who }); logP('✔ 已排定「' + (title||'未命名') + '」，' + products.length + ' 個商品'); }
+  catch(e){ logP('✖ 排定失敗：' + e.message); }
+  this.disabled = false; loadPjJobs();
+});
+
+$('#btnPjZero').addEventListener('click', async function(){
+  var products = pjPayload(); if(!products.length){ alert('沒有商品'); return; }
+  if(!confirm('把這 ' + products.length + ' 個商品的會員價／VIP／VVIP 全部設為 0？\n（讀取時有特價的會補回特價）')) return;
+  this.disabled = true; logP('歸零中…');
+  try{ var r = await api('zeroPricesNow', { products: products, tiers: pjTiers, by: $('#who').value.trim() }); applyPjResults(r.results || {}); logP('✔ 歸零完成' + (r.failed ? '，失敗 ' + r.failed + ' 筆（表格標紅）' : '')); }
+  catch(e){ logP('✖ 歸零失敗：' + e.message); }
+  this.disabled = false; loadPjJobs();
+});
+
+async function loadPjJobs(){
+  var box = $('#pjJobsBox');
+  try{
+    var j = await api('priceJobs', {}); if(!j.items.length){ box.textContent = '目前沒有改價任務'; return; }
+    var stMap = {pending:'等待中', applying:'寫入中', active:'套用中', zeroing:'歸零中', done:'✔ 完成', cancelled:'已取消'};
+    box.innerHTML = '<table><thead><tr><th>活動</th><th>開始</th><th>結束</th><th>商品數</th><th>狀態</th><th>操作者</th><th></th></tr></thead><tbody>' + j.items.map(function(it){
+      var st = (stMap[it.status] || it.status) + (it.failed ? '，' + it.failed + ' 筆失敗' : '');
+      var btn = '';
+      if(it.status==='pending') btn = '<button class="btn ghost mini" data-pjapply="' + it.id + '">立即套用</button> <button class="btn ghost mini" data-pjcancel="' + it.id + '">取消</button>';
+      if(it.status==='active') btn = '<button class="btn ghost mini" data-pjzero="' + it.id + '">立即歸零</button>';
+      if(it.results) btn += ' <button class="btn ghost mini" data-pjshow="' + it.id + '">明細</button>';
+      if(['done','cancelled'].indexOf(it.status)>=0) btn += ' <button class="btn ghost mini" data-pjdel="' + it.id + '">刪除</button>';
+      return '<tr' + (it.failed ? ' class="bad"' : '') + '><td>' + esc(it.title||'') + '</td><td>' + fmtDT(it.startAt) + '</td><td>' + fmtDT(it.endAt) + '</td><td>' + it.count + '</td><td>' + st + '</td><td>' + esc(it.by||'') + '</td><td>' + btn + '</td></tr>';
+    }).join('') + '</tbody></table>';
+    window.__pjJobs = j.items;
+    var on = function(sel, fn){ Array.prototype.forEach.call(box.querySelectorAll(sel), function(b){ b.addEventListener('click', function(){ fn.call(b); }); }); };
+    on('[data-pjapply]', async function(){ if(!confirm('現在就寫入會員價？')) return; this.disabled = true; try{ var r = await api('runPriceJobNow', {jobId: this.dataset.pjapply, step:'apply'}); logP('套用完成，失敗 ' + r.failed + ' 筆'); }catch(e){ logP('✖ ' + e.message); } loadPjJobs(); });
+    on('[data-pjzero]', async function(){ if(!confirm('現在就歸零（並補回特價）？')) return; this.disabled = true; try{ var r = await api('runPriceJobNow', {jobId: this.dataset.pjzero, step:'zero'}); logP('歸零完成，失敗 ' + r.failed + ' 筆'); }catch(e){ logP('✖ ' + e.message); } loadPjJobs(); });
+    on('[data-pjcancel]', async function(){ if(!confirm('取消這個任務？')) return; try{ await api('cancelPriceJob', {jobId: this.dataset.pjcancel}); }catch(e){ logP('✖ ' + e.message); } loadPjJobs(); });
+    on('[data-pjdel]', async function(){ if(!confirm('刪除這筆紀錄？')) return; try{ await api('deletePriceJob', {jobId: this.dataset.pjdel}); }catch(e){ logP('✖ ' + e.message); } loadPjJobs(); });
+    on('[data-pjshow]', function(){ var it = window.__pjJobs.filter(function(x){return x.id===this.dataset.pjshow;}, this)[0]; if(!it){ return; } log4El.textContent = ''; Object.keys(it.results).forEach(function(k){ logP(((it.titles||{})[k] || k) + '：' + it.results[k]); }); });
+  }catch(e){ box.textContent = '✖ ' + e.message; }
+}
+$('#btnPjJobs').addEventListener('click', loadPjJobs);
 
 // ===== 文案／尺寸表 =====
 var log2El = $('#log2');
