@@ -30,6 +30,26 @@ input[type=text],input[type=date]{font-family:inherit;height:40px;border:1px sol
 .two input{width:100%}
 .chip{align-self:flex-start;padding:3px 10px;border-radius:999px;background:#EEF0F3}
 .msg{padding:12px 14px;border-radius:12px;font-weight:500;display:none}
+.evtop{display:flex;justify-content:flex-end}
+.seg{display:inline-flex;background:#E9ECF0;border-radius:999px;padding:3px}
+.seg button{font-family:inherit;font-size:12px;border:0;background:none;color:#1F2430;padding:5px 14px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed=true]{background:#1F2430;color:#fff}
+.cal{background:#fff;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.wk{display:flex;gap:6px}.wl{flex:none;width:30px;font-size:11.5px;color:#5B6472;padding-top:6px}
+.wgrid{flex:1;min-width:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));row-gap:5px}
+.dh{text-align:center;padding:4px 0 6px;border-bottom:1px solid #E9ECF0}
+.dh span{display:block;font-size:11px;color:#5B6472}.dh b{font-size:13.5px;font-weight:500}
+.dh.we span,.dh.we b{color:#9B1C12}.dh.today b{background:#1F2430;color:#fff;border-radius:999px;padding:1px 7px}
+.evbar{font-family:inherit;font-size:11.5px;font-weight:500;text-align:left;border:0;cursor:pointer;min-height:26px;padding:4px 8px;margin:0 2px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.evbar.c0{background:#1F2430;color:#fff}.evbar.c1{background:#DCE6F7;color:#1F3A6E}.evbar.c2{background:#E6F4EC;color:#17633A}.evbar.c3{background:#F3E8D2;color:#6B4A12}
+.evnext{font-size:12px;color:#5B6472;border-top:1px solid #E9ECF0;padding-top:8px}
+.evitem{background:#fff;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:5px}
+.evitem.sel{outline:2px solid #1F2430}
+.evitem .n{font-weight:700;font-size:13.5px}.evitem .d{color:#5B6472}.evitem .mech{line-height:1.6;white-space:pre-line}
+.evchips{display:flex;flex-wrap:wrap;gap:4px}
+.evchips span{font-size:11px;padding:2px 9px;border-radius:999px;background:#EEF0F3}
+.evchips span.k{background:#1F2430;color:#fff}.evchips span.g{background:#E6F4EC;color:#17633A}.evchips span.r{background:#FDE8E6;color:#9B1C12}
+.evnote{background:#FFF4CC;border-radius:8px;padding:8px 10px;line-height:1.55;white-space:pre-line}
 .msg.ok{background:#E6F4EC;color:#17633A}
 .msg.err{background:#FDE8E6;color:#9B1C12}
 .msg.info{background:#EEF0F3;color:#1F2430}
@@ -97,6 +117,14 @@ table.t th:first-child,table.t td:first-child{text-align:left}
   <div class="msg err" id="err"></div>
 
   <div id="form">
+    <details class="sec" id="secEv" open>
+      <summary><span>活動</span><span class="r"><span id="evSum"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+      <div class="secbody">
+        <div class="evtop" id="evTop" style="display:none"><div class="seg"><button type="button" id="evCalBtn" aria-pressed="true">週曆</button><button type="button" id="evListBtn" aria-pressed="false">清單</button></div></div>
+        <div class="cal" id="evCal" style="display:none"></div>
+        <div id="evList" style="display:flex;flex-direction:column;gap:8px"><div class="sub" id="evMsg">載入中</div></div>
+      </div>
+    </details>
     <details class="sec" open>
       <summary><span>今日回報</span><span class="r"><span id="sumDaily">$0</span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></summary>
       <div class="secbody">
@@ -225,7 +253,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
     paySum();
     Array.prototype.forEach.call(document.querySelectorAll('[data-street]'), function (el) { el.style.display = dept ? 'none' : 'flex'; if (dept) el.querySelector('input').value = ''; });
   }
-  var VER = 'v1.10';
+  var VER = 'v1.11';
 
   function show(id, text) {
     ['info', 'ok', 'err'].forEach(function (k) { $(k).style.display = 'none'; });
@@ -562,6 +590,64 @@ table.t th:first-child,table.t td:first-child{text-align:left}
   }
   $('secProg').addEventListener('toggle', function () { if (this.open) loadProg(); });
 
+
+  // 活動：近兩週、通路有門市的活動。週曆是本週＋下週，點色條會標出下面那一檔
+  function addD(date, n) { var p = date.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)).toISOString().slice(0, 10); }
+  function renderEvents(list, tdy) {
+    var box = $('evList'); box.textContent = '';
+    $('evSum').textContent = list.length ? list.length + ' 檔' : '';
+    if (!list.length) { box.appendChild(el('div', 'sub', '兩週內沒有門市活動')); return; }
+    var cards = list.map(function (e) {
+      var c = el('div', 'evitem');
+      c.appendChild(el('div', 'n', e.name));
+      c.appendChild(el('div', 'd', e.when));
+      var ch = el('div', 'evchips');
+      ch.appendChild(el('span', e.state === 'start' ? 'g' : e.state === 'last' ? 'r' : e.state === 'on' ? 'k' : '', e.tag));
+      if (e.channel) ch.appendChild(el('span', '', e.channel));
+      c.appendChild(ch);
+      if (e.mech) c.appendChild(el('div', 'mech', e.mech));
+      if (e.note) c.appendChild(el('div', 'evnote', e.note));
+      box.appendChild(c);
+      return c;
+    });
+    var pick = function (i) { cards.forEach(function (c, k) { c.classList.toggle('sel', k === i); }); cards[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+    var cal = $('evCal'); cal.textContent = '';
+    var mon = addD(tdy, -((new Date(tdy + 'T00:00:00Z').getUTCDay() + 6) % 7)), last = addD(mon, 13), shown = 0;
+    ['本週', '下週'].forEach(function (label, w) {
+      var ws = addD(mon, w * 7), we = addD(ws, 6), row = el('div', 'wk'), g = el('div', 'wgrid');
+      row.appendChild(el('div', 'wl', label));
+      for (var i = 0; i < 7; i++) {
+        var d = addD(ws, i), h = el('div', 'dh' + (d === tdy ? ' today' : '') + (i > 4 ? ' we' : ''));
+        h.appendChild(el('span', '', '一二三四五六日'.charAt(i)));
+        h.appendChild(el('b', '', (i === 0 || d.slice(8) === '01' ? Number(d.slice(5, 7)) + '/' : '') + Number(d.slice(8))));
+        h.style.gridRow = '1'; h.style.gridColumn = String(i + 1);
+        g.appendChild(h);
+      }
+      var lanes = [];
+      list.forEach(function (e, k) {
+        var end = e.end || last;
+        if (e.start > we || end < ws) return;
+        var a = e.start < ws ? 0 : Math.round((Date.parse(e.start) - Date.parse(ws)) / 864e5), b = end > we ? 6 : Math.round((Date.parse(end) - Date.parse(ws)) / 864e5);
+        var bar = el('button', 'evbar c' + (k % 4), e.name);
+        bar.type = 'button'; bar.title = e.name + '　' + e.when;
+        var ln = 0; while (lanes[ln] !== undefined && lanes[ln] >= a) ln++; lanes[ln] = b;
+        bar.style.gridRow = String(ln + 2); bar.style.gridColumn = (a + 1) + ' / ' + (b + 2);
+        bar.addEventListener('click', function () { pick(k); });
+        g.appendChild(bar); shown++;
+      });
+      row.appendChild(g); cal.appendChild(row);
+    });
+    var later = list.filter(function (e) { return e.start > last; });
+    if (later.length) cal.appendChild(el('div', 'evnext', '接下來　' + later.map(function (e) { return md(e.start) + ' ' + e.name; }).join('、')));
+    $('evTop').style.display = 'flex';
+    var mode = function (calOn) { cal.style.display = calOn ? 'flex' : 'none'; $('evCalBtn').setAttribute('aria-pressed', String(calOn)); $('evListBtn').setAttribute('aria-pressed', String(!calOn)); };
+    $('evCalBtn').onclick = function () { mode(true); }; $('evListBtn').onclick = function () { mode(false); };
+    mode(true);
+  }
+  function loadEvents() {
+    getJson('op=events').then(function (j) { renderEvents(j.events || [], j.today); })
+      .catch(function () { var b = $('evList'); b.textContent = ''; b.appendChild(el('div', 'sub', '活動讀取失敗，請稍後重新開啟')); });
+  }
   function start() {
     if (!store) { show('err', '這個分頁還沒設定門市，請總部重新加入分頁'); return; }
     $('storeName').textContent = STORES[store];
@@ -586,6 +672,7 @@ table.t th:first-child,table.t td:first-child{text-align:left}
       show(null);
       $('form').style.display = 'flex';
       if (j.hq) { isHq = true; $('hqBox').style.display = 'flex'; }
+      loadEvents();
     }).catch(function (e) {
       var raw = String((e && (e.message || e.errorCode)) || e || '');
       show('err', stage + '沒有成功，請關掉分頁重新開啟');

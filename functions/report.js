@@ -295,9 +295,9 @@ function buildCard(d, photoUrl, tag) {
 }
 
 // ---------- 試算表 ----------
-function sheetsApi(GoogleAuth) {
+function sheetsApi(GoogleAuth, id = SHEET_ID) {
   const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/spreadsheets"] });
-  const base = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
+  const base = `https://sheets.googleapis.com/v4/spreadsheets/${id}`;
   const call = async (path, opt = {}) => {
     const client = await auth.getClient();
     const r = await client.request({ url: base + path, method: opt.method || "GET", data: opt.data });
@@ -493,6 +493,11 @@ async function handle(req, res, deps) {
       const store = String(req.query.store || "");
       if (!STORES[store]) return res.status(400).json({ ok: false, error: "門市不對" });
       return res.json({ ok: true, today, progress: await ops.progressFor({ sheets, GoogleAuth }, store, today) });
+    }
+    // 近兩週門市活動（公司帳號都能看；只回門市可以看的欄位）
+    if (req.method === "GET" && req.query.op === "events") {
+      const EV = require("./events"), today = twNow().date;
+      return res.json({ ok: true, today, events: await EV.load({ eventSheets: sheetsApi(GoogleAuth, EV.EVENT_SHEET) }, today) });
     }
     if (req.method !== "POST") return res.status(405).json({ ok: false, error: "不支援" });
 

@@ -1,6 +1,7 @@
 // 門市回報的「本月進度」與「開店提醒」：
 // 資料 = 試算表（新的回報）＋ 門市營運中心資料庫（舊的日誌、目標、營業時間；唯讀）
 const R = require("./report");
+const EV = require("./events");
 
 const BAR_URL = "https://asia-east1-vvdouble-shopline.cloudfunctions.net/report?op=bar";
 const GEO = {
@@ -312,7 +313,7 @@ const TAICHUNG = ["yizhong", "xinyizhong"];
 
 // ---------- 開店提醒卡片 ----------
 function openingCard(o) {
-  const { store, date, open, w, pg, last, tips, tag } = o;
+  const { store, date, open, w, pg, last, tips, tag, events } = o;
   const facts = [];
   if (w) facts.push({ title: "天氣", value: `${WX[w.key] || ""} ${w.text}　${w.tmin}–${w.tmax}°C${w.pop !== null ? `　降雨機率 ${w.pop}%` : ""}` });
   if (pg.todayTarget) facts.push({ title: "今日目標", value: `🎯 ${R.money(pg.todayTarget)}` });
@@ -324,6 +325,7 @@ function openingCard(o) {
   ];
   if (facts.length) body.push({ type: "FactSet", facts });
   body.push(...progressBars(pg, date));
+  body.push(...EV.cardBlocks(events || [], heading));
   if (tips.length) {
     body.push(heading("今日建議 📝"));
     tips.forEach((t, k) => body.push({ type: "TextBlock", text: `${EMOJI[t.label] || "👉"} **${t.label}**　${t.text}`, wrap: true, spacing: k ? "Small" : "Medium" }));
@@ -331,7 +333,8 @@ function openingCard(o) {
   return { type: "message", attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4", body } }] };
 }
 async function buildOpening(ctx, store, date, tag, open) {
-  const [data, w] = await Promise.all([loadStore(ctx, store, date), quiet(forecast(store, date), "forecast")]);
+  if (!ctx.eventSheets && ctx.GoogleAuth) ctx.eventSheets = R.sheetsApi(ctx.GoogleAuth, EV.EVENT_SHEET);
+  const [data, w, events] = await Promise.all([loadStore(ctx, store, date), quiet(forecast(store, date), "forecast"), ctx.eventSheets ? quiet(EV.load(ctx, date), "events") : null]);
   let pg = progress(data, date);
   // 一中、新一中的月目標合併計算：卡片上的本月進度顯示兩間合計
   if (TAICHUNG.includes(store)) {
@@ -347,7 +350,7 @@ async function buildOpening(ctx, store, date, tag, open) {
   // 數據建議已經在講試穿轉換時，服務技巧換一則別的，不重複
   if (coach.some((t) => t.label === "近期試穿轉換偏低") && svc.label === SERVICE[0][0]) { const alt = SERVICE[1 + (dayNo(date) % (SERVICE.length - 1))]; svc = { label: alt[0], text: alt[1] }; }
   const tips = [...contextTips(data, date), ...todayTips(w, date), svc, ...coach].slice(0, 5);
-  return openingCard({ store, date, open, w, pg, last: lastDay && lastDay.sales > 0 ? lastDay : null, tips, tag });
+  return openingCard({ store, date, open, w, pg, last: lastDay && lastDay.sales > 0 ? lastDay : null, tips, tag, events: events || [] });
 }
 async function postOpening(ctx, store, date, tag, open, hookOverride) {
   const hook = hookOverride || (await R.readWebhook(ctx.sheets, store, ctx.GoogleAuth));
