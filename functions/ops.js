@@ -7,22 +7,24 @@ const GEO = {
   zhongxiao: [25.041, 121.564], tongyi: [25.046, 121.516], taoyuan: [24.993, 121.301], yizhong: [24.146, 120.685],
   xinyizhong: [24.15, 120.683], xintiandi: [22.992, 120.213], xinjuejiang: [22.624, 120.302],
 };
-// 開門時間（星期 0＝週日），沿用舊工具的預設值；舊資料庫 /global/settings/storeHours 有改就以它為準
+// 開門時間（星期 0＝週日）：照官網門市資訊頁的營業時間（每天同一個時間開門）。
+// 臨時要改：試算表「設定」分頁 F 欄填時間（例如 12:00）或「公休」，留空就用這裡的。
 const wk = (a, b, c, d, e, f, g) => ({ 0: a, 1: b, 2: c, 3: d, 4: e, 5: f, 6: g });
+const all = (t) => wk(t, t, t, t, t, t, t);
 const OPEN_DEFAULT = {
-  zhongxiao: wk("12:30", "12:30", "12:30", "12:30", "12:30", "13:00", "13:00"),
-  tongyi: wk("12:30", "10:30", "10:30", "10:30", "10:30", "13:00", "13:00"),
-  taoyuan: wk("13:00", "10:30", "10:30", "10:30", "10:30", "10:30", "13:00"),
-  yizhong: wk("12:30", "12:30", "12:30", "12:30", "12:30", "12:30", "12:30"),
-  xinyizhong: wk("13:00", "13:00", "13:00", "13:00", "13:00", "13:00", "13:00"),
-  xintiandi: wk("13:00", "10:30", "10:30", "10:30", "10:30", "10:30", "13:00"),
-  xinjuejiang: wk("13:00", "13:00", "13:00", "13:00", "13:00", "13:00", "13:00"),
+  zhongxiao: all("13:00"), tongyi: all("11:00"), taoyuan: all("11:00"), yizhong: all("13:00"),
+  xinyizhong: all("13:00"), xintiandi: all("11:00"), xinjuejiang: all("13:30"),
 };
 const dow = (date) => { const [y, m, d] = date.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); };
 const addDays = (date, n) => { const [y, m, d] = date.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
 const monthDays = (ym) => { const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
 const n0 = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
-
+// 設定分頁 F 欄 → openTime 吃的格式
+function hoursFromCfg(cfg) {
+  const out = {};
+  (cfg || []).forEach((r) => { const t = String(r[5] || "").trim(); if (R.STORES[r[0]] && t) out[r[0]] = all({ open: t }); });
+  return out;
+}
 function openTime(store, date, override) {
   const day = override && override[store] && override[store][dow(date)];
   const t = day && day.open;
@@ -350,7 +352,7 @@ async function buildOpening(ctx, store, date, tag, open) {
 async function postOpening(ctx, store, date, tag, open, hookOverride) {
   const hook = hookOverride || (await R.readWebhook(ctx.sheets, store, ctx.GoogleAuth));
   if (!hook) return { posted: false, reason: "這間門市還沒有設定聊天室通知" };
-  if (open === undefined) open = openTime(store, date, await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours"));
+  if (open === undefined) open = openTime(store, date, hoursFromCfg(await quiet(ctx.sheets.get("設定!A2:F"), "hours")));
   const card = await buildOpening(ctx, store, date, tag, open);
   const r = await fetch(hook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
   return { posted: r.ok, status: r.status };
@@ -372,10 +374,10 @@ async function syncMonthTargets(ctx, ym) {
 async function sweepOpening(db, ctx, ts = Date.now()) {
   const now = R.twNow(ts);
   const mins = Number(now.stamp.slice(11, 13)) * 60 + Number(now.stamp.slice(14, 16));
-  const cfg = await ctx.sheets.get("設定!A2:D");
+  const cfg = await ctx.sheets.get("設定!A2:F");
   const on = cfg.filter((r) => String(r[3] || "").trim() === "開").map((r) => String(r[0] || "").trim()).filter((s) => R.STORES[s]);
-  const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
-  await quiet(ctx.sheets.put(`設定!E1:E${cfg.length + 1}`, [[`今日開門時間（${now.date}，${hours ? "含舊工具的調整" : "預設值"}）`], ...cfg.map((r) => [R.STORES[r[0]] ? openTime(r[0], now.date, hours) || "公休" : ""])]), "hours sheet");
+  const hours = hoursFromCfg(cfg);
+  await quiet(ctx.sheets.put(`設定!E1:E${cfg.length + 1}`, [[`今日開門時間（${now.date}）`], ...cfg.map((r) => [R.STORES[r[0]] ? openTime(r[0], now.date, hours) || "公休" : ""])]), "hours sheet");
   await quiet(syncMonthTargets(ctx, now.date.slice(0, 7)), "month targets");
   if (!on.length) return [];
   const out = [];
@@ -443,12 +445,11 @@ async function importOld(ctx, ym) {
 }
 // 把某間店某天的開店提醒內容寫成文字放到「開店提醒預覽」分頁（不貼聊天室）
 async function previewOpening(ctx, store, date) {
-  const hours = await quiet(R.storeDbGet(ctx.GoogleAuth, "/global/settings/storeHours"), "hours");
-  const card = await buildOpening(ctx, store, date, "", openTime(store, date, hours));
+  const card = await buildOpening(ctx, store, date, "", openTime(store, date, hoursFromCfg(await quiet(ctx.sheets.get("設定!A2:F"), "hours"))));
   const lines = [];
   card.attachments[0].content.body.forEach((b0) => { let b = b0; if (b.type === "Image") return; if (b.items) b = b.items[0]; if (b.facts) b.facts.forEach((f) => lines.push(`${f.title}　${f.value}`)); else lines.push(String(b.text || "").replace(/\*\*/g, "")); });
   await ctx.sheets.put(`開店提醒預覽!A1:A${lines.length + 1}`, [[`產生時間 ${R.twNow().stamp}`], ...lines.map((x) => [x])]);
   return lines.length;
 }
 
-module.exports = { syncMonthTargets, barPng, contextTips, serviceTip, progressBars, oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
+module.exports = { hoursFromCfg, syncMonthTargets, barPng, contextTips, serviceTip, progressBars, oldRow, importOld, previewOpening,  GEO, OPEN_DEFAULT, openTime, weatherKey, forecast, sheetDay, oldDay, loadStore, progress, progressFor, progressAll, stats7, coachTips, todayTips, openingCard, buildOpening, postOpening, sweepOpening, addDays };
