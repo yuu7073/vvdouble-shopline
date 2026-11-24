@@ -79,20 +79,31 @@ async function load(ctx, today) {
   return upcoming(parseEvents(ctx.eventRows, today), today);
 }
 
-// 開店提醒卡片裡的「近期活動」段落
+// 開店提醒卡片裡的「近期活動」段落：一檔一格、中間有分隔線；名稱在左、狀態在右
 function cardBlocks(list, heading) {
   if (!list.length) return [];
   const body = [heading("近期活動 📣")];
+  const color = { start: "Good", last: "Attention", on: "Accent" };
+  const block = (e, first) => {
+    const items = [
+      { type: "ColumnSet", columns: [
+        { type: "Column", width: "stretch", items: [{ type: "TextBlock", text: e.name, weight: "Bolder", wrap: true }] },
+        { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: e.tag, size: "Small", weight: "Bolder", color: color[e.state] || "Default", isSubtle: e.state === "soon", horizontalAlignment: "Right" }] },
+      ] },
+      { type: "TextBlock", text: e.when, isSubtle: true, size: "Small", spacing: "None", wrap: true },
+    ];
+    // 優惠機制一行一個區塊，不留空行；整行都在括號裡的是補充說明，字縮小變淡
+    e.mech.split("\n").map((x) => x.trim()).filter(Boolean).forEach((line, k) => {
+      const aside = /^[（(].*[）)]$/.test(line);
+      items.push({ type: "TextBlock", text: line, wrap: true, spacing: k ? "None" : "Small", ...(aside ? { isSubtle: true, size: "Small" } : {}) });
+    });
+    if (e.note) items.push({ type: "TextBlock", text: `⚠️ ${e.note.replace(/\n+/g, "；")}`, wrap: true, color: "Attention", size: "Small", spacing: "Small" });
+    return { type: "Container", separator: !first, spacing: first ? "Small" : "Medium", items };
+  };
   const group = (title, arr) => {
     if (!arr.length) return;
     body.push({ type: "TextBlock", text: title, weight: "Bolder", isSubtle: true, size: "Small", spacing: "Medium" });
-    arr.forEach((e) => {
-      const mark = e.state === "start" ? "🟢" : e.state === "last" ? "🔴" : e.state === "on" ? "🟡" : "🗓️";
-      body.push({ type: "TextBlock", text: `${mark} **${e.name}**　${e.tag}`, wrap: true, spacing: "Small" });
-      body.push({ type: "TextBlock", text: `${e.when}　${e.channel}`, wrap: true, isSubtle: true, size: "Small", spacing: "None" });
-      if (e.mech) body.push({ type: "TextBlock", text: e.mech.replace(/\n/g, "\n\n"), wrap: true, spacing: "None" });
-      if (e.note) body.push({ type: "TextBlock", text: `⚠️ ${e.note.replace(/\n/g, "\n\n")}`, wrap: true, color: "Attention", spacing: "None" });
-    });
+    arr.forEach((e, k) => body.push(block(e, k === 0)));
   };
   const shown = list.slice(0, 6);
   group("進行中", shown.filter((e) => e.state !== "soon"));
